@@ -8,4 +8,4 @@ find_package(fmi4cpp REQUIRED)
 
 add_executable(etherdog-fmu main.cpp)
 
-target_link_libraries(etherdog-fmu fmi4cpp::fmi4cpp)
+target_link_libraries(etherdog fmi4cpp::fmi4cpp kickcat tinyxml2)
