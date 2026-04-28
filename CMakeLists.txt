@@ -4,8 +4,11 @@ project(fmu_test)
 set(CMAKE_CXX_STANDARD 17)
 
 find_package(fmi4cpp REQUIRED)
-#find_package(kickcat REQUIRED)
+find_package(KickCAT CONFIG REQUIRED)
 
-add_executable(etherdog-fmu main.cpp)
+add_executable(etherdog-fmu 
+    main.cpp
+    etherdog.cpp
+)
 
-target_link_libraries(etherdog-fmu fmi4cpp::fmi4cpp kickcat tinyxml2)
+target_link_libraries(etherdog-fmu fmi4cpp::fmi4cpp KickCAT::kickcat)
