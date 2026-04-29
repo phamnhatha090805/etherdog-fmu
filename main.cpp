@@ -15,10 +15,8 @@ int main(int argc, char *argv[])
     const std::string fmu_path = "/home/etherdog/fmu_test/Test2-1.fmu";
     etherdog.loadFMU(fmu_path);
     etherdog.StartNetworks(argc, argv);
-
     etherdog.start();
     etherdog.run();
     etherdog.stop();
-
     return 0;
 }
