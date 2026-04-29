@@ -15,10 +15,6 @@ int main()
     const std::string fmu_path = "/home/etherdog/fmu_test/Test2-1.fmu";
     etherdog.loadFMU(fmu_path);
 
-    CoE::EsiParser parser;
-    // Load the first device's dictionary from your ESI file
-    auto dictionary = parser.loadFirstDictionaryFromFile("/home/etherdog/KickCAT/sample_app_Analogio.xml");
-
     etherdog.start();
     etherdog.run();
     etherdog.stop();

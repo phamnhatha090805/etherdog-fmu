@@ -1,7 +1,25 @@
 
 #include "etherdog.hpp"
 
-const double stopTime = 10.0;
+#include <algorithm>
+#include <argparse/argparse.hpp>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <nlohmann/json.hpp>
+#include <numeric>
+
+#include "kickcat/CoE/EsiParser.h"
+#include "kickcat/CoE/mailbox/response.h"
+#include "kickcat/ESC/EmulatedESC.h"
+#include "kickcat/Frame.h"
+#include "kickcat/OS/Time.h"
+#include "kickcat/PDO.h"
+#include "kickcat/helpers.h"
+#include "kickcat/slave/Slave.h"
+
+// const double stopTime = 10.0;
 const double stepSize = 0.01;
 
 void EtherDOG::loadFMU(const std::string &fmu_path)
@@ -32,59 +50,55 @@ void EtherDOG::start()
 
 void EtherDOG::run()
 {
-    while ((t = fmu_slave->get_simulation_time()) <= stopTime)
+    while (true)
     {
+        Frame frame;
+        int32_t r = socket->read(frame.data(), ETH_MAX_SIZE);
+        if (r < 0)
+        {
+            printf("Something wrong happened. Aborting...\n");
+            return -1;
+        }
+
+        auto t1 = since_epoch();
+
+        while (true)
+        {
+            auto [header, data, wkc] = frame.peekDatagram();
+            if (header == nullptr)
+            {
+                break;
+            }
+
+            for (auto &esc : escs)
+            {
+                esc->processDatagram(header, data, wkc);
+            }
+        }
+
+        for (size_t i = 0; i < slaves.size(); ++i)
+        {
+            slaves[i]->routine();
+            if (slaves[i]->state() == State::SAFE_OP)
+            {
+                if (output_pdo[i][1] != 0xFF)
+                {
+                    slaves[i]->validateOutputData();
+                }
+            }
+
+            std::fill(input_pdo[i].begin(), input_pdo[i].end(), current_value);
+        }
         step();
     }
 }
 
 // void EtherDOG::handleFrames()
-// {
+//{
 // }
 
 void EtherDOG::step()
 {
-
-    /*
-       Frame frame;
-       int32_t r = socket->read(frame.data(), ETH_MAX_SIZE);
-       if (r < 0)
-       {
-           printf("Something wrong happened. Aborting...\n");
-           return -1;
-       }
-
-       auto t1 = since_epoch();
-
-       while (true)
-       {
-           auto [header, data, wkc] = frame.peekDatagram();
-           if (header == nullptr)
-           {
-               break;
-           }
-
-           for (auto& esc : escs)
-           {
-               esc->processDatagram(header, data, wkc);
-           }
-       }
-
-       for (size_t i = 0; i < slaves.size(); ++i)
-       {
-           slaves[i]->routine();
-           if (slaves[i]->state() == State::SAFE_OP)
-           {
-               if (output_pdo[i][1] != 0xFF)
-               {
-                   slaves[i]->validateOutputData();
-               }
-           }
-
-           std::fill(input_pdo[i].begin(), input_pdo[i].end(), current_value);
-       }
-       */
-
     auto var = cs_md->get_variable_by_name("Out1").as_real();
     auto vr = var.valueReference();
     double value;
@@ -101,7 +115,7 @@ void EtherDOG::step()
         std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
         return;
     }
-    std::cout << "t=" << t << ", " << var.name() << "=" << value << std::endl;
+    // std::cout << "t=" << t << ", " << var.name() << "=" << value << std::endl;
     // std::cout << "t=" << t << ", " << var.name() << "=" << value << ", " << var2.name() << "=" << value2 << std::endl;
 }
 
