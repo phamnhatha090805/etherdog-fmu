@@ -19,8 +19,94 @@
 #include "kickcat/helpers.h"
 #include "kickcat/slave/Slave.h"
 
-// const double stopTime = 10.0;
-const double stepSize = 0.01;
+using namespace kickcat;
+using namespace kickcat::slave;
+using json = nlohmann::json;
+namespace fs = std::filesystem;
+
+const double stopTime = 1;
+const double stepSize = 1;
+
+CoE::Device findDeviceByVendorAndProduct(std::vector<CoE::Device> &&devices, uint32_t vendor_id, uint32_t product_code, uint32_t revision_number)
+{
+    for (CoE::Device &device : devices)
+    {
+        if (device.vendor_id == vendor_id && device.product_code == product_code && device.revision_number == revision_number)
+        {
+            printf("Found matching device in ESI file for vendor_id 0x%08x, product_code 0x%08x, revision_number 0x%08x\n", vendor_id, product_code, revision_number);
+            return std::move(device);
+        }
+    }
+    std::stringstream ss;
+    ss << "No matching device found for vendor_id 0x" << std::hex << vendor_id << " and product_code 0x" << product_code << " and revision_number 0x" << revision_number;
+    throw std::runtime_error(ss.str());
+}
+
+int EtherDOG::StartNetworks(int argc, char *argv[])
+{
+    argparse::ArgumentParser program("network_simulator");
+
+    std::string interface;
+    program.add_argument("-i", "--interface")
+        .help("network interface name")
+        .required()
+        .store_into(interface);
+
+    int slave_number = 0;
+    program.add_argument("-n", "--count")
+        .help("Number of slaves to simulate")
+        .default_value(0)
+        .scan<'i', int>()
+        .store_into(slave_number);
+
+    std::vector<std::string> slave_configs;
+    program.add_argument("-s", "--slaves")
+        .help("JSON configuration files for slaves")
+        .remaining()
+        .store_into(slave_configs);
+
+    try
+    {
+        program.parse_args(argc, argv);
+    }
+    catch (const std::runtime_error &err)
+    {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        return 1;
+    }
+
+    if (slave_configs.empty())
+    {
+        std::cerr << "No slave configuration files provided" << std::endl;
+        std::cerr << program;
+        return 1;
+    }
+
+    std::vector<std::string> expanded_slave_configs;
+
+    if (slave_number > 0)
+    {
+        if (slave_configs.size() != 1)
+        {
+            std::cerr << "When using --count/-n, you must provide exactly one JSON config file with --slaves/-s" << std::endl;
+            return 1;
+        }
+
+        expanded_slave_configs.reserve(slave_number);
+        for (int i = 0; i < slave_number; ++i)
+        {
+            expanded_slave_configs.push_back(slave_configs[0]);
+        }
+    }
+    else
+    {
+        expanded_slave_configs = slave_configs;
+    }
+
+    size_t slave_count = expanded_slave_configs.size();
+    return 0;
+}
 
 void EtherDOG::loadFMU(const std::string &fmu_path)
 {
@@ -50,52 +136,11 @@ void EtherDOG::start()
 
 void EtherDOG::run()
 {
-    while (true)
+    while ((t = fmu_slave->get_simulation_time()) <= stopTime)
     {
-        Frame frame;
-        int32_t r = socket->read(frame.data(), ETH_MAX_SIZE);
-        if (r < 0)
-        {
-            printf("Something wrong happened. Aborting...\n");
-            return -1;
-        }
-
-        auto t1 = since_epoch();
-
-        while (true)
-        {
-            auto [header, data, wkc] = frame.peekDatagram();
-            if (header == nullptr)
-            {
-                break;
-            }
-
-            for (auto &esc : escs)
-            {
-                esc->processDatagram(header, data, wkc);
-            }
-        }
-
-        for (size_t i = 0; i < slaves.size(); ++i)
-        {
-            slaves[i]->routine();
-            if (slaves[i]->state() == State::SAFE_OP)
-            {
-                if (output_pdo[i][1] != 0xFF)
-                {
-                    slaves[i]->validateOutputData();
-                }
-            }
-
-            std::fill(input_pdo[i].begin(), input_pdo[i].end(), current_value);
-        }
         step();
     }
 }
-
-// void EtherDOG::handleFrames()
-//{
-// }
 
 void EtherDOG::step()
 {
@@ -115,7 +160,7 @@ void EtherDOG::step()
         std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
         return;
     }
-    // std::cout << "t=" << t << ", " << var.name() << "=" << value << std::endl;
+    std::cout << "t=" << t << ", " << var.name() << "=" << value << std::endl;
     // std::cout << "t=" << t << ", " << var.name() << "=" << value << ", " << var2.name() << "=" << value2 << std::endl;
 }
 

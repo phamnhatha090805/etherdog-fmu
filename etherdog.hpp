@@ -20,6 +20,7 @@ public:
     void run();
     void step();
     void stop();
+    int StartNetworks(int argc, char *argv[]);
 
 private:
     double t;
@@ -29,4 +30,11 @@ private:
     std::unique_ptr<fmi4cpp::fmi2::cs_slave> fmu_slave;
     // fmi4cpp::fmi2::real_variable var;
     // fmi2ValueReference vr;
+
+    /*std::vector<std::unique_ptr<EmulatedESC>> escs;
+    std::vector<std::unique_ptr<PDO>> pdos;
+    std::vector<std::unique_ptr<Slave>> slaves;
+    std::vector<std::unique_ptr<mailbox::response::Mailbox>> mailboxes;
+    std::vector<std::vector<uint8_t>> input_pdo;
+    std::vector<std::vector<uint8_t>> output_pdo;*/
 };
