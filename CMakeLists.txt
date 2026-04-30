@@ -11,4 +11,10 @@ add_executable(etherdog-fmu
     etherdog.cpp
 )
 
+target_compile_options(etherdog-fmu PRIVATE 
+    -Wall -Wextra -Wpedantic -Wshadow
+    -Werror 
+    -Wno-unused-parameter -Wno-unused-variable
+)
+
 target_link_libraries(etherdog-fmu fmi4cpp::fmi4cpp KickCAT::kickcat)

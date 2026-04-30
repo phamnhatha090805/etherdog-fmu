@@ -21,7 +21,7 @@
 #include "kickcat/PDO.h"
 #include "kickcat/helpers.h"
 #include "kickcat/slave/Slave.h"
-#include <kickcat/OS/Linux/Socket.h>
+#include <kickcat/AbstractSocket.h>
 
 using namespace fmi4cpp;
 using namespace kickcat;
@@ -42,7 +42,9 @@ public:
     void FrameHandler();
 
     const double stopTime = 100.0;
-    const double stepSize = 1;
+    const double stepSize = 0.01;
+
+    double fmu_output;
 
 private:
     double t;
@@ -53,7 +55,7 @@ private:
     // fmi4cpp::fmi2::real_variable var;
     // fmi2ValueReference vr;
 
-    std::unique_ptr<kickcat::Socket> socket;
+    std::shared_ptr<kickcat::AbstractSocket> socket;
     std::vector<std::unique_ptr<EmulatedESC>> escs;
     std::vector<std::unique_ptr<PDO>> pdos;
     std::vector<std::unique_ptr<Slave>> slaves;
