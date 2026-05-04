@@ -1,9 +1,5 @@
 #pragma once
 
-#include <iostream>
-#include <fmi4cpp/fmi4cpp.hpp>
-
-#include <kickcat/KickCAT.h>
 #include <algorithm>
 #include <argparse/argparse.hpp>
 #include <filesystem>
@@ -12,6 +8,10 @@
 #include <sstream>
 #include <nlohmann/json.hpp>
 #include <numeric>
+#include <mutex>
+
+#include <fmi4cpp/fmi4cpp.hpp>
+#include <kickcat/KickCAT.h>
 
 #include "kickcat/CoE/EsiParser.h"
 #include "kickcat/CoE/mailbox/response.h"
@@ -38,13 +38,13 @@ public:
     void step();
     void stop();
 
+    void FmuThread();
+
     int StartNetworks(int argc, char *argv[]);
     void FrameHandler();
 
-    const double stopTime = 100.0;
-    const double stepSize = 0.01;
-
-    double fmu_output;
+    const double stopTime = 10.0;
+    const double stepSize = 0.1; // this is in seconds
 
 private:
     double t;
@@ -67,4 +67,6 @@ private:
     int slave_number = 0;
     std::vector<std::string> slave_configs;
     std::vector<nanoseconds> stats;
+
+    std::mutex fmu_mutex; // Mutex to protect access to FMU output variable
 };

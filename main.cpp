@@ -5,6 +5,8 @@
 #include <kickcat/CoE/EsiParser.h>
 #include "etherdog.hpp"
 
+#include <thread>
+
 using namespace fmi4cpp;
 using namespace kickcat;
 
@@ -16,7 +18,9 @@ int main(int argc, char *argv[])
     const std::string fmu_path = "/home/etherdog/fmu_test/Test2-1.fmu";
     etherdog.loadFMU(fmu_path);
     etherdog.start();
+    std::thread fmu_thread(&EtherDOG::FmuThread, &etherdog);
     etherdog.run();
+    fmu_thread.join();
     etherdog.stop();
     return 0;
 }
