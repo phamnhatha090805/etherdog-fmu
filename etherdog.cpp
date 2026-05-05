@@ -276,7 +276,7 @@ void EtherDOG::FmuThread()
 void EtherDOG::step()
 {
     double fmu_output;
-    uint16_t rx_value;
+    double rx_value;
     auto var = cs_md->get_variable_by_name("Out1").as_real();
     auto vr = var.valueReference();
 
@@ -294,9 +294,9 @@ void EtherDOG::step()
         return;
     }
 
-    fmu_mutex.lock();                                        // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
-    rx_value = static_cast<uint16_t>(fmu_output * 10 + 100); // Just an example of how to convert the FMU output to a uint16_t value for the EtherCAT slave. Adjust as needed.
-    std::memcpy(input_pdo[0].data(), &rx_value, sizeof(uint16_t));
+    fmu_mutex.lock();      // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
+    rx_value = fmu_output; // Just an example of how to convert the FMU output to a uint16_t value for the EtherCAT slave. Adjust as needed.
+    std::memcpy(input_pdo[0].data(), &rx_value, sizeof(double));
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
 
     // FrameHandler();
