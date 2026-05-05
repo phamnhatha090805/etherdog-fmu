@@ -1,0 +1,8 @@
+{
+    "input-mappings": [
+        {
+            "fmu": "Out1",
+            "pdo": "AnalogIN0"
+        }
+    ]
+}
