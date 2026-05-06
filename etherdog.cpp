@@ -272,7 +272,9 @@ void EtherDOG::SetupMapping()
             if (entry.description == pdo_name)
             {
                 mapping_found = true;
-                // Still need to map the FMU variable to the PDO variable. Under development, so for now we just print out the mapping info.
+                fmu_mutex.lock(); // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
+                std::memcpy(entry.data, &fmu_output, sizeof(double));
+                fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
                 std::cout << "Mapping FMU variable '" << fmu_out << "' to PDO variable '" << pdo_name << std::endl;
                 break;
             }
@@ -288,11 +290,6 @@ void EtherDOG::SetupMapping()
         std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
         return;
     }
-
-    fmu_mutex.lock();      // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
-    rx_value = fmu_output; // Just an example of how to convert the FMU output to a uint16_t value for the EtherCAT slave. Adjust as needed.
-    std::memcpy(input_pdo[0].data(), &rx_value, sizeof(double));
-    fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
 
     std::cout << "t=" << t << ", " << var.name() << "=" << fmu_output << std::endl;
 }
