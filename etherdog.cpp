@@ -28,6 +28,11 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
         .required()
         .store_into(interface);
 
+    program.add_argument("-m", "--mapping")
+        .help("JSON configuration file for FMU to PDO mapping")
+        .required()
+        .store_into(mapping_file);
+
     program.add_argument("-n", "--count")
         .help("Number of slaves to simulate")
         .default_value(0)
@@ -246,10 +251,37 @@ void EtherDOG::SetupMapping()
 {
     // This function can be used to set up the mapping between FMU variables and EtherCAT PDOs based on the MappedVar.json configuration file.
     // You can read the JSON file, parse the mappings, and store them in a suitable data structure for use in FrameHandler and FmuThread.
-    std::string fmu_out = "Out2";       // Example FMU output variable name
-    std::string pdo_name = "AnalogIN0"; // Example PDO name
+    std::ifstream file(mapping_file);
+    if (!file.is_open())
+    {
+        std::cerr << "Failed to open mapping configuration file: " << mapping_file << std::endl;
+        return;
+    }
+    json config;
+    file >> config;
+    std::string fmu_out = config["input-mappings"][0]["fmu"].get<std::string>();  // Example FMU output variable name
+    std::string pdo_name = config["input-mappings"][0]["pdo"].get<std::string>(); // Example PDO name
     auto var = cs_md->get_variable_by_name(fmu_out).as_real();
     auto vr = var.valueReference();
+    auto &dict = mailboxes[0]->getDictionary(); // Assuming you want to use the first mailbox's dictionary for mapping. Adjust as needed.
+    bool mapping_found = false;
+    for (auto &object : dict)
+    {
+        for (auto &entry : object.entries)
+        {
+            if (entry.description == pdo_name)
+            {
+                mapping_found = true;
+                // Still need to map the FMU variable to the PDO variable. Under development, so for now we just print out the mapping info.
+                std::cout << "Mapping FMU variable '" << fmu_out << "' to PDO variable '" << pdo_name << std::endl;
+                break;
+            }
+            if (mapping_found)
+            {
+                break;
+            }
+        }
+    }
 
     if (!fmu_slave->read_real(vr, fmu_output))
     {
@@ -312,12 +344,7 @@ void EtherDOG::step()
 
     t = fmu_slave->get_simulation_time();
 
-    SetupMapping();
-    /*fmu_mutex.lock();      // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
-    rx_value = fmu_output; // Just an example of how to convert the FMU output to a uint16_t value for the EtherCAT slave. Adjust as needed.
-    std::memcpy(input_pdo[0].data(), &rx_value, sizeof(double));
-    fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
-    std::cout << "t=" << t << ", " << var.name() << "=" << fmu_output << std::endl;*/
+    SetupMapping(); // Call SetupMapping to update the mapping between FMU variables and PDOs.
 }
 
 void EtherDOG::stop()

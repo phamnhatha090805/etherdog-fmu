@@ -70,6 +70,7 @@ private:
     std::string interface;
     int slave_number = 0;
     std::vector<std::string> slave_configs;
+    std::string mapping_file;
     std::vector<nanoseconds> stats;
 
     std::mutex fmu_mutex; // Mutex to protect access to FMU output variable
