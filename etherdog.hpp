@@ -43,8 +43,12 @@ public:
     int StartNetworks(int argc, char *argv[]);
     void FrameHandler();
 
+    void SetupMapping();
+
     const double stopTime = 10.0;
     const double stepSize = 0.1; // this is in seconds
+    double fmu_output;
+    double rx_value;
 
 private:
     double t;
