@@ -265,6 +265,13 @@ void EtherDOG::SetupMapping()
     auto vr = var.valueReference();
     auto &dict = mailboxes[0]->getDictionary(); // Assuming you want to use the first mailbox's dictionary for mapping. Adjust as needed.
     bool mapping_found = false;
+
+    if (!fmu_slave->read_real(vr, fmu_output))
+    {
+        std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
+        return;
+    }
+
     for (auto &object : dict)
     {
         for (auto &entry : object.entries)
@@ -272,9 +279,9 @@ void EtherDOG::SetupMapping()
             if (entry.description == pdo_name)
             {
                 mapping_found = true;
-                fmu_mutex.lock(); // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
-                std::memcpy(entry.data, &fmu_output, sizeof(double));
-                fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
+                fmu_mutex.lock();                                     // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
+                std::memcpy(entry.data, &fmu_output, sizeof(double)); // Copy bytes from FMU variable into PDO memory
+                fmu_mutex.unlock();                                   // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
                 std::cout << "Mapping FMU variable '" << fmu_out << "' to PDO variable '" << pdo_name << std::endl;
                 break;
             }
@@ -284,13 +291,6 @@ void EtherDOG::SetupMapping()
             }
         }
     }
-
-    if (!fmu_slave->read_real(vr, fmu_output))
-    {
-        std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
-        return;
-    }
-
     std::cout << "t=" << t << ", " << var.name() << "=" << fmu_output << std::endl;
 }
 
