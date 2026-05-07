@@ -259,39 +259,54 @@ void EtherDOG::SetupMapping()
     }
     json config;
     file >> config;
-    std::string fmu_out = config["input-mappings"][0]["fmu"].get<std::string>();  // Example FMU output variable name
-    std::string pdo_name = config["input-mappings"][0]["pdo"].get<std::string>(); // Example PDO name
-    auto var = cs_md->get_variable_by_name(fmu_out).as_real();
-    auto vr = var.valueReference();
-    auto &dict = mailboxes[0]->getDictionary(); // Assuming you want to use the first mailbox's dictionary for mapping. Adjust as needed.
-    bool mapping_found = false;
+    auto &dict = mailboxes[0]->getDictionary(); // Get EtherCAT dictonary
 
-    if (!fmu_slave->read_real(vr, fmu_output))
+    for (auto &map : config["input-mappings"])
     {
-        std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
-        return;
-    }
-
-    for (auto &object : dict)
-    {
-        for (auto &entry : object.entries)
+        for (auto i = map.begin(); i != map.end(); ++i)
         {
-            if (entry.description == pdo_name)
+            std::cout << "Key: " << i.key() << ", Value: " << i.value() << std::endl;
+            std::string fmu_out = i.key();
+            std::string pdo_name = i.value().get<std::string>();
+            auto var = cs_md->get_variable_by_name(fmu_out).as_real();
+            auto vr = var.valueReference();
+            bool mapping_found = false;
+
+            if (!fmu_slave->read_real(vr, fmu_output))
             {
-                mapping_found = true;
-                fmu_mutex.lock();                                     // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
-                std::memcpy(entry.data, &fmu_output, sizeof(double)); // Copy bytes from FMU variable into PDO memory
-                fmu_mutex.unlock();                                   // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
-                std::cout << "Mapping FMU variable '" << fmu_out << "' to PDO variable '" << pdo_name << std::endl;
-                break;
+                std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
+                return;
             }
-            if (mapping_found)
+
+            for (auto &object : dict)
             {
-                break;
+                for (auto &entry : object.entries)
+                {
+                    if (entry.description == pdo_name)
+                    {
+                        fmu_mutex.lock(); // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
+                        size_t size = entry.bitlen / 8;
+                        std::memcpy(entry.data, &fmu_output, size); // Copy bytes from FMU variable into PDO memory
+                        fmu_mutex.unlock();                         // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
+
+                        std::cout << "Mapping FMU variable '" << fmu_out << "' to PDO variable '" << pdo_name << std::endl;
+                        std::cout << "t=" << t << ", " << var.name() << "=" << fmu_output << std::endl;
+
+                        mapping_found = true;
+                        break;
+                    }
+                }
+                if (mapping_found)
+                {
+                    break; // exit outer loop
+                }
+            }
+            if (!mapping_found)
+            {
+                std::cerr << "PDO entry not found: " << pdo_name << std::endl;
             }
         }
     }
-    std::cout << "t=" << t << ", " << var.name() << "=" << fmu_output << std::endl;
 }
 
 void EtherDOG::loadFMU(const std::string &fmu_path)
