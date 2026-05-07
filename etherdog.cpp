@@ -4,6 +4,7 @@
 
 CoE::Device findDeviceByVendorAndProduct(std::vector<CoE::Device> &&devices, uint32_t vendor_id, uint32_t product_code, uint32_t revision_number)
 {
+    // This function searches through the provided list of CoE::Device objects to find one that matches the given vendor_id, product_code, and revision_number.
     for (CoE::Device &device : devices)
     {
         if (device.vendor_id == vendor_id && device.product_code == product_code && device.revision_number == revision_number)
@@ -19,12 +20,18 @@ CoE::Device findDeviceByVendorAndProduct(std::vector<CoE::Device> &&devices, uin
 
 int EtherDOG::StartNetworks(int argc, char *argv[])
 {
+    // This function can be used to set up the EtherCAT network simulation, including parsing command-line arguments, initializing the slaves and PDOs, and starting the network communication.
     argparse::ArgumentParser program("network_simulator");
 
     program.add_argument("-i", "--interface")
         .help("network interface name")
         .required()
         .store_into(interface);
+
+    program.add_argument("-m", "--mapping")
+        .help("JSON configuration file for FMU to PDO mapping")
+        .required()
+        .store_into(mapping_file);
 
     program.add_argument("-n", "--count")
         .help("Number of slaves to simulate")
@@ -185,6 +192,8 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
 
 void EtherDOG::FrameHandler()
 {
+    // This function is called in a loop to handle incoming EtherCAT frames, process them with the slaves and ESCs, and send responses back.
+    // It also measures the processing time for performance statistics.
     Frame frame;
     int32_t received = socket->read(frame.data(), ETH_MAX_SIZE);
 
@@ -238,8 +247,69 @@ void EtherDOG::FrameHandler()
     }
 }
 
+void EtherDOG::SetupMapping()
+{
+    // This function can be used to set up the mapping between FMU variables and EtherCAT PDOs based on the MappedVar.json configuration file.
+    // You can read the JSON file, parse the mappings, and store them in a suitable data structure for use in FrameHandler and FmuThread.
+    std::ifstream file(mapping_file);
+    if (!file.is_open())
+    {
+        std::cerr << "Failed to open mapping configuration file: " << mapping_file << std::endl;
+        return;
+    }
+    json config;
+    file >> config;
+    auto &dict = mailboxes[0]->getDictionary(); // Get EtherCAT dictonary
+    auto &map = config["input-mappings"];
+
+    for (auto i = map.begin(); i != map.end(); ++i)
+    {
+        std::cout << "Key: " << i.key() << ", Value: " << i.value() << std::endl;
+        std::string fmu_out = i.key();
+        std::string pdo_name = i.value().get<std::string>();
+        auto var = cs_md->get_variable_by_name(fmu_out).as_real();
+        auto vr = var.valueReference();
+        bool mapping_found = false;
+
+        if (!fmu_slave->read_real(vr, fmu_output))
+        {
+            std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
+            return;
+        }
+
+        for (auto &object : dict)
+        {
+            for (auto &entry : object.entries)
+            {
+                if (entry.description == pdo_name)
+                {
+                    fmu_mutex.lock(); // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
+                    size_t size = entry.bitlen / 8;
+                    std::memcpy(entry.data, &fmu_output, size); // Copy bytes from FMU variable into PDO memory
+                    fmu_mutex.unlock();                         // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
+
+                    std::cout << "Mapping FMU variable '" << fmu_out << "' to PDO variable '" << pdo_name << std::endl;
+                    std::cout << "t=" << t << ", " << var.name() << "=" << fmu_output << std::endl;
+
+                    mapping_found = true;
+                    break;
+                }
+            }
+            if (mapping_found)
+            {
+                break; // exit outer loop
+            }
+        }
+        if (!mapping_found)
+        {
+            std::cerr << "PDO entry not found: " << pdo_name << std::endl;
+        }
+    }
+}
+
 void EtherDOG::loadFMU(const std::string &fmu_path)
 {
+    // This function loads the FMU from the specified path and initializes the cs_fmu, cs_md, and fmu_slave members.
     std::cout << "Loading FMU from path: " << fmu_path << std::endl;
     fmi2::fmu fmu(fmu_path);
     cs_fmu = fmu.as_cs_fmu();
@@ -250,6 +320,7 @@ void EtherDOG::loadFMU(const std::string &fmu_path)
 
 void EtherDOG::start()
 {
+    // This function can be used to perform any necessary initialization before starting the simulation, such as setting up the FMU experiment and entering initialization mode.
     std::cout << "Starting simulation..." << std::endl;
     fmu_slave->setup_experiment();
     fmu_slave->enter_initialization_mode();
@@ -275,11 +346,6 @@ void EtherDOG::FmuThread()
 
 void EtherDOG::step()
 {
-    double fmu_output;
-    uint16_t rx_value;
-    auto var = cs_md->get_variable_by_name("Out1").as_real();
-    auto vr = var.valueReference();
-
     if (!fmu_slave->step(stepSize))
     {
         std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
@@ -288,20 +354,7 @@ void EtherDOG::step()
 
     t = fmu_slave->get_simulation_time();
 
-    if (!fmu_slave->read_real(vr, fmu_output))
-    {
-        std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
-        return;
-    }
-
-    fmu_mutex.lock();                                        // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
-    rx_value = static_cast<uint16_t>(fmu_output * 10 + 100); // Just an example of how to convert the FMU output to a uint16_t value for the EtherCAT slave. Adjust as needed.
-    std::memcpy(input_pdo[0].data(), &rx_value, sizeof(uint16_t));
-    fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
-
-    // FrameHandler();
-    std::cout << "t=" << t << ", " << var.name() << "=" << fmu_output << std::endl;
-    //  std::cout << "t=" << t << ", " << var.name() << "=" << value << ", " << var2.name() << "=" << value2 << std::endl;
+    SetupMapping(); // Call SetupMapping to update the mapping between FMU variables and PDOs.
 }
 
 void EtherDOG::stop()

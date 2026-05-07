@@ -43,8 +43,12 @@ public:
     int StartNetworks(int argc, char *argv[]);
     void FrameHandler();
 
+    void SetupMapping();
+
     const double stopTime = 10.0;
     const double stepSize = 0.1; // this is in seconds
+    double fmu_output;
+    double rx_value;
 
 private:
     double t;
@@ -66,6 +70,7 @@ private:
     std::string interface;
     int slave_number = 0;
     std::vector<std::string> slave_configs;
+    std::string mapping_file;
     std::vector<nanoseconds> stats;
 
     std::mutex fmu_mutex; // Mutex to protect access to FMU output variable

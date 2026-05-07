@@ -1,0 +1,6 @@
+{
+    "input-mappings": {
+        "Out1": "AnalogIN1",
+        "Out2": "AnalogIN0"
+    }
+}
