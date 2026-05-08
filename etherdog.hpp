@@ -47,17 +47,16 @@ public:
 
     const double stopTime = 10.0;
     const double stepSize = 0.1; // this is in seconds
-    double fmu_output;
-    double rx_value;
 
 private:
+    void ExecuteInputMappings();
+    void ExecuteOutputMappings();
+
     double t;
     // fmi2::fmu fmu;
     std::unique_ptr<fmi4cpp::fmi2::cs_fmu> cs_fmu;
     std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_md;
     std::unique_ptr<fmi4cpp::fmi2::cs_slave> fmu_slave;
-    // fmi4cpp::fmi2::real_variable var;
-    // fmi2ValueReference vr;
 
     std::shared_ptr<kickcat::AbstractSocket> socket;
     std::vector<std::unique_ptr<EmulatedESC>> escs;
@@ -72,6 +71,18 @@ private:
     std::vector<std::string> slave_configs;
     std::string mapping_file;
     std::vector<nanoseconds> stats;
+
+    struct Mapping
+    {
+        fmi2ValueReference vr; // FMU variable ID
+        size_t size;           // number of bytes
+        std::string PDOname;
+        std::string FMUname;
+        CoE::Entry &entry; // the CoE entry corresponding to this mapping, for debug/info purposes
+    };
+
+    std::vector<Mapping> input_mappings;
+    std::vector<Mapping> output_mappings;
 
     std::mutex fmu_mutex; // Mutex to protect access to FMU output variable
 };
