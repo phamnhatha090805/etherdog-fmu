@@ -226,7 +226,6 @@ void EtherDOG::FrameHandler()
                 slaves[i]->validateOutputData();
             }
         }
-        // std::memcpy(input_pdo[0].data(), &rx_value, sizeof(int16_t));
     }
 
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update fmu_output again
@@ -286,17 +285,64 @@ void EtherDOG::SetupMapping()
                         entry,
                     };
 
-                    std::cout << "Entry address" << entry.data << std::endl;
                     input_mappings.push_back(m);
                     mapping_found = true;
                     break;
                 }
             }
+
             if (mapping_found)
             {
                 break; // exit outer loop
             }
         }
+
+        if (!mapping_found)
+        {
+            std::cerr << "PDO entry not found: " << pdo_name << std::endl;
+        }
+    }
+
+    auto &out_map = config["output-mappings"];
+
+    for (auto i = out_map.begin(); i != out_map.end(); ++i)
+    {
+        std::cout << "Key: " << i.key() << ", Value: " << i.value() << std::endl;
+
+        std::string fmu_input = i.key();
+        std::string pdo_name = i.value().get<std::string>();
+
+        auto var = cs_md->get_variable_by_name(fmu_input).as_real();
+        auto vr = var.valueReference();
+
+        bool mapping_found = false;
+
+        for (auto &object : dict)
+        {
+            for (auto &entry : object.entries)
+            {
+                if (entry.description == pdo_name)
+                {
+                    Mapping m{
+                        vr,
+                        (size_t)(entry.bitlen / 8),
+                        pdo_name,
+                        fmu_input,
+                        entry,
+                    };
+
+                    output_mappings.push_back(m);
+                    mapping_found = true;
+                    break;
+                }
+            }
+
+            if (mapping_found)
+            {
+                break;
+            }
+        }
+
         if (!mapping_found)
         {
             std::cerr << "PDO entry not found: " << pdo_name << std::endl;
@@ -304,23 +350,24 @@ void EtherDOG::SetupMapping()
     }
 }
 
-void EtherDOG::ExecuteInputMappings()
+void EtherDOG::ExecutePdoInputMappings()
 {
-    // SetupMapping(); // Call SetupMapping to ensure we have the latest mapping configuration loaded (in case it changes at runtime)
-    //  This function can be called in FrameHandler after processing the EtherCAT frames to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
+    //  This function can be called in Step() after stepping the FMU to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : input_mappings)
     {
         double fmu_output;
+
         if (!fmu_slave->read_real(m.vr, fmu_output))
         {
             std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
             continue;
         }
+
         if (m.entry.is_mapped)
         {
             std::memcpy(m.entry.data, &fmu_output, m.size); // Copy bytes from FMU variable into PDO memory
-            std::cout << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << std::endl;
+            std::cout << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
         }
         else
         {
@@ -330,12 +377,31 @@ void EtherDOG::ExecuteInputMappings()
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again
 }
 
-void EtherDOG::ExecuteOutputMappings()
+void EtherDOG::ExecutePdoOutputMappings()
 {
+    // This function can be called in Step() before stepping the FMU to read the latest values from the PDO memory based on the mappings set up in SetupMapping and write them to the corresponding FMU variables.
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
+    for (auto &m : output_mappings)
+    {
+        double fmu_input;
 
-    // TODO
+        if (m.entry.is_mapped)
+        {
+            std::memcpy(&fmu_input, m.entry.data, m.size); // Copy PDO bytes into local variable
+        }
+        else
+        {
+            std::cerr << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped." << std::endl;
+        }
 
+        if (!fmu_slave->write_real(m.vr, fmu_input))
+        {
+            std::cerr << "Error writing FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+            continue;
+        }
+
+        std::cout << "Mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "' value= " << fmu_input << std::endl;
+    }
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again
 }
 
@@ -378,18 +444,17 @@ void EtherDOG::FmuThread()
 
 void EtherDOG::step()
 {
-    ExecuteOutputMappings();
+    ExecutePdoOutputMappings(); // Call ExecutePdoOutputMappings to read the latest values from the PDO memory based on the mappings set up in SetupMapping and write them to the corresponding FMU variables.
 
     if (!fmu_slave->step(stepSize))
     {
         std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
         return;
     }
-
     t = fmu_slave->get_simulation_time();
-
     std::cout << "t=" << t << std::endl;
-    ExecuteInputMappings(); // Call ExecuteInputMappings to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
+
+    ExecutePdoInputMappings(); // Call ExecutePdoInputMappings to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
 }
 
 void EtherDOG::stop()

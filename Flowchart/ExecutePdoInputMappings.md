@@ -15,7 +15,7 @@ graph TD
     I --> J[Print Mapping Success Log]
     J --> G
     
-    H -- No --> K[Print Warning: Entry not mapped]
+    H -- No --> K[Print Warning: CoE Entry not mapped]
     K --> G
 
     G -- Yes --> C

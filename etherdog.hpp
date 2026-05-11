@@ -49,8 +49,8 @@ public:
     const double stepSize = 0.1; // this is in seconds
 
 private:
-    void ExecuteInputMappings();
-    void ExecuteOutputMappings();
+    void ExecutePdoInputMappings();
+    void ExecutePdoOutputMappings();
 
     double t;
     // fmi2::fmu fmu;
