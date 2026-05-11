@@ -1,38 +1,37 @@
 graph TD
-    A([Start: SetupMapping]) --> B[Open JSON config file]
-    B --> C{File open?}
-    
-    C -- No --> D[Print error & Return]
-    D --> Z
-    C -- Yes --> E[Parse JSON into 'config']
-    
-    E --> F[Access EtherCAT dictionary & JSON file]
-    F --> G[Loop through each mapping pair from JSON]
-    
-    G --> J[Extract FMU variable name & PDO name]
-    J --> K[Get FMU Value Reference]
-    K --> L[Read current FMU real value into 'fmu_output']
-    
-    L --> M{Read Success?}
-    M -- No --> N[Print error & Return]
-    N --> Z
-    
-    M -- Yes --> O[Loop through EtherCAT Dictionary Objects]
-    
-    O --> P{mapping_found?}
-    P -- No --> Q[Print 'PDO entry not found']
-    Q --> G
-    
-    P -- Yes --> R[Loop through Entries in Object]
-    
-    R --> S{Entry matches pdo_name?}
-    S -- No --> R
-    S -- Yes --> U[Lock fmu_mutex]
-    
-    U --> V[memcpy fmu_output to entry.data]
-    V --> W[Unlock fmu_mutex]
-    
-    W --> X[Print mapping confirmation]
-    X --> Y[mapping_found = true and break] 
 
-    Y --> Z[End]
+    A[SetupMapping Called] --> B[Open MappedVar.json]
+    B --> C{File Opened?}
+
+    C -- No --> D[Print Error: Failed to open file]
+    D --> E[Return]
+
+    C -- Yes --> F[Parse JSON & Get EtherCAT Dictionary]
+    F --> G[Loop Through input-mappings JSON]
+
+    G --> H[Read FMU name & PDO name]
+    H --> I[Get FMU Value Reference vr]
+    I --> J[Initialize mapping_found = false]
+
+    J --> K[Loop Through EtherCAT Objects]
+    K --> L[Loop Through Object Entries]
+
+    L --> M{entry.description == PDO Name?}
+
+    M -- Yes --> N[Create Mapping Struct & Push to input_mappings]
+    N --> O[Set mapping_found = true]
+    O --> P[Break Entry Loop]
+
+    M -- No --> L
+
+    P --> Q{mapping_found == true?}
+    Q -- Yes --> R[Break Object Loop]
+    Q -- No --> K
+
+    R --> S{mapping_found == false?}
+    S -- Yes --> T[Print Error: PDO entry not found]
+    S -- No --> U{More JSON Mappings?}
+
+    T --> U
+    U -- Yes --> G
+    U -- No --> V[Setup Complete]
