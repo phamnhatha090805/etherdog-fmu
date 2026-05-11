@@ -15,7 +15,7 @@ int main(int argc, char *argv[])
     EtherDOG etherdog;
 
     etherdog.StartNetworks(argc, argv);
-    const std::string fmu_path = "/home/etherdog/fmu_test/TestEC1-1.fmu";
+    const std::string fmu_path = "/home/etherdog/fmu_test/TestEC2-1.fmu";
     etherdog.loadFMU(fmu_path);
     etherdog.SetupMapping();
     etherdog.start();
