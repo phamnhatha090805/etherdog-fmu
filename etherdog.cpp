@@ -271,26 +271,23 @@ void EtherDOG::SetupMapping()
         auto vr = var.valueReference();
         bool mapping_found = false;
 
-        if (!fmu_slave->read_real(vr, fmu_output))
-        {
-            std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
-            return;
-        }
-
         for (auto &object : dict)
         {
             for (auto &entry : object.entries)
             {
                 if (entry.description == pdo_name)
                 {
-                    fmu_mutex.lock(); // Lock MUTEX here if needed to safely update fmu_output while it's being read by FrameHandler
-                    size_t size = entry.bitlen / 8;
-                    std::memcpy(entry.data, &fmu_output, size); // Copy bytes from FMU variable into PDO memory
-                    fmu_mutex.unlock();                         // Unlock MUTEX here if it was locked before to allow FrameHandler to read fmu_output again
+                    Mapping m{
+                        // Create a Mapping struct and initialize it with the FMU variable's value reference, size (in bytes), PDO name, FMU variable name, and a reference to the CoE entry for debug/info purposes.
+                        vr,
+                        (size_t)(entry.bitlen / 8),
+                        pdo_name,
+                        fmu_out,
+                        entry,
+                    };
 
-                    std::cout << "Mapping FMU variable '" << fmu_out << "' to PDO variable '" << pdo_name << std::endl;
-                    std::cout << "t=" << t << ", " << var.name() << "=" << fmu_output << std::endl;
-
+                    std::cout << "Entry address" << entry.data << std::endl;
+                    input_mappings.push_back(m);
                     mapping_found = true;
                     break;
                 }
@@ -305,6 +302,41 @@ void EtherDOG::SetupMapping()
             std::cerr << "PDO entry not found: " << pdo_name << std::endl;
         }
     }
+}
+
+void EtherDOG::ExecuteInputMappings()
+{
+    // SetupMapping(); // Call SetupMapping to ensure we have the latest mapping configuration loaded (in case it changes at runtime)
+    //  This function can be called in FrameHandler after processing the EtherCAT frames to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
+    fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
+    for (auto &m : input_mappings)
+    {
+        double fmu_output;
+        if (!fmu_slave->read_real(m.vr, fmu_output))
+        {
+            std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+            continue;
+        }
+        if (m.entry.is_mapped)
+        {
+            std::memcpy(m.entry.data, &fmu_output, m.size); // Copy bytes from FMU variable into PDO memory
+            std::cout << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << std::endl;
+        }
+        else
+        {
+            std::cerr << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped. Skipping mapping for this entry." << std::endl;
+        }
+    }
+    fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again
+}
+
+void EtherDOG::ExecuteOutputMappings()
+{
+    fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
+
+    // TODO
+
+    fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again
 }
 
 void EtherDOG::loadFMU(const std::string &fmu_path)
@@ -346,6 +378,8 @@ void EtherDOG::FmuThread()
 
 void EtherDOG::step()
 {
+    ExecuteOutputMappings();
+
     if (!fmu_slave->step(stepSize))
     {
         std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
@@ -354,7 +388,8 @@ void EtherDOG::step()
 
     t = fmu_slave->get_simulation_time();
 
-    SetupMapping(); // Call SetupMapping to update the mapping between FMU variables and PDOs.
+    std::cout << "t=" << t << std::endl;
+    ExecuteInputMappings(); // Call ExecuteInputMappings to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
 }
 
 void EtherDOG::stop()
