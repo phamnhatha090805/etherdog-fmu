@@ -246,73 +246,18 @@ void EtherDOG::FrameHandler()
     }
 }
 
-void EtherDOG::SetupMapping()
+void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_md, kickcat::CoE::Dictionary &dict, json &out_map, std::vector<EtherDOG::Mapping> &mappings)
 {
-    // This function can be used to set up the mapping between FMU variables and EtherCAT PDOs based on the MappedVar.json configuration file.
-    // You can read the JSON file, parse the mappings, and store them in a suitable data structure for use in FrameHandler and FmuThread.
-    std::ifstream file(mapping_file);
-    if (!file.is_open())
-    {
-        std::cerr << "Failed to open mapping configuration file: " << mapping_file << std::endl;
-        return;
-    }
-    json config;
-    file >> config;
-    auto &dict = mailboxes[0]->getDictionary(); // Get EtherCAT dictonary
-    auto &map = config["input-mappings"];
-
-    for (auto i = map.begin(); i != map.end(); ++i)
-    {
-        std::cout << "Key: " << i.key() << ", Value: " << i.value() << std::endl;
-        std::string fmu_out = i.key();
-        std::string pdo_name = i.value().get<std::string>();
-        auto var = cs_md->get_variable_by_name(fmu_out).as_real();
-        auto vr = var.valueReference();
-        bool mapping_found = false;
-
-        for (auto &object : dict)
-        {
-            for (auto &entry : object.entries)
-            {
-                if (entry.description == pdo_name)
-                {
-                    Mapping m{
-                        // Create a Mapping struct and initialize it with the FMU variable's value reference, size (in bytes), PDO name, FMU variable name, and a reference to the CoE entry for debug/info purposes.
-                        vr,
-                        (size_t)(entry.bitlen / 8),
-                        pdo_name,
-                        fmu_out,
-                        entry,
-                    };
-
-                    input_mappings.push_back(m);
-                    mapping_found = true;
-                    break;
-                }
-            }
-
-            if (mapping_found)
-            {
-                break; // exit outer loop
-            }
-        }
-
-        if (!mapping_found)
-        {
-            std::cerr << "PDO entry not found: " << pdo_name << std::endl;
-        }
-    }
-
-    auto &out_map = config["output-mappings"];
+    // This function loads the mapping between FMU variables and EtherCAT PDOs from the provided JSON configuration and the CoE dictionary, and stores it in the provided mappings vector.
 
     for (auto i = out_map.begin(); i != out_map.end(); ++i)
     {
         std::cout << "Key: " << i.key() << ", Value: " << i.value() << std::endl;
 
-        std::string fmu_input = i.key();
+        std::string fmu_var = i.key();
         std::string pdo_name = i.value().get<std::string>();
 
-        auto var = cs_md->get_variable_by_name(fmu_input).as_real();
+        auto var = cs_md->get_variable_by_name(fmu_var).as_real();
         auto vr = var.valueReference();
 
         bool mapping_found = false;
@@ -323,15 +268,15 @@ void EtherDOG::SetupMapping()
             {
                 if (entry.description == pdo_name)
                 {
-                    Mapping m{
+                    EtherDOG::Mapping m{
                         vr,
                         (size_t)(entry.bitlen / 8),
                         pdo_name,
-                        fmu_input,
+                        fmu_var,
                         entry,
                     };
 
-                    output_mappings.push_back(m);
+                    mappings.push_back(m);
                     mapping_found = true;
                     break;
                 }
@@ -346,13 +291,38 @@ void EtherDOG::SetupMapping()
         if (!mapping_found)
         {
             std::cerr << "PDO entry not found: " << pdo_name << std::endl;
+            throw std::runtime_error("PDO entry not found: " + pdo_name);
         }
     }
+}
+
+void EtherDOG::SetupMappingFile()
+{
+    // This function reads the JSON configuration file specified by mapping_file, extracts the FMU to PDO mappings for both input and output,
+    // and stores them in the input_mappings and output_mappings vectors using the LoadMapping function.
+
+    std::ifstream file(mapping_file);
+    if (!file.is_open())
+    {
+        std::cerr << "Failed to open mapping configuration file: " << mapping_file << std::endl;
+        return;
+    }
+
+    json config;
+    file >> config;
+    auto &dict = mailboxes[0]->getDictionary(); // Get EtherCAT dictonary
+
+    auto &map = config["input-mappings"];
+    LoadMapping(cs_md, dict, map, input_mappings);
+
+    auto &out_map = config["output-mappings"];
+    LoadMapping(cs_md, dict, out_map, output_mappings);
 }
 
 void EtherDOG::ExecutePdoInputMappings()
 {
     //  This function can be called in Step() after stepping the FMU to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
+
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : input_mappings)
     {
@@ -380,6 +350,7 @@ void EtherDOG::ExecutePdoInputMappings()
 void EtherDOG::ExecutePdoOutputMappings()
 {
     // This function can be called in Step() before stepping the FMU to read the latest values from the PDO memory based on the mappings set up in SetupMapping and write them to the corresponding FMU variables.
+
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : output_mappings)
     {
@@ -408,6 +379,7 @@ void EtherDOG::ExecutePdoOutputMappings()
 void EtherDOG::loadFMU(const std::string &fmu_path)
 {
     // This function loads the FMU from the specified path and initializes the cs_fmu, cs_md, and fmu_slave members.
+
     std::cout << "Loading FMU from path: " << fmu_path << std::endl;
     fmi2::fmu fmu(fmu_path);
     cs_fmu = fmu.as_cs_fmu();
@@ -419,6 +391,7 @@ void EtherDOG::loadFMU(const std::string &fmu_path)
 void EtherDOG::start()
 {
     // This function can be used to perform any necessary initialization before starting the simulation, such as setting up the FMU experiment and entering initialization mode.
+
     std::cout << "Starting simulation..." << std::endl;
     fmu_slave->setup_experiment();
     fmu_slave->enter_initialization_mode();
@@ -444,6 +417,9 @@ void EtherDOG::FmuThread()
 
 void EtherDOG::step()
 {
+    // This function performs a single simulation step, including executing the PDO output mappings to update the FMU variables with the latest values from the PDO memory,
+    // stepping the FMU, and then executing the PDO input mappings to update the PDO memory with the latest values from the FMU variables.
+
     ExecutePdoOutputMappings(); // Call ExecutePdoOutputMappings to read the latest values from the PDO memory based on the mappings set up in SetupMapping and write them to the corresponding FMU variables.
 
     if (!fmu_slave->step(stepSize))
