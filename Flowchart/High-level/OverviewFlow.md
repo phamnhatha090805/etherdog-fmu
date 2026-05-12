@@ -6,8 +6,7 @@ flowchart TD
     A[main] --> C
 
     C[Initialize EtherCAT Network]
-    C --> C1[Load Slave and PDO Configuration, configure ESC and Mailbox]
-    C1 --> C2[Open Socket and Start Slaves]
+    C --> C2[Open Socket and Start Slaves]
 
     C2 --> D[Load FMU]
 
@@ -26,9 +25,7 @@ flowchart TD
 
     H2 --> H3[Lock Mutex]
     H3 --> H4[Process EtherCAT Datagrams]
-    H4 --> H5[Run Slave Routines]
-    H5 --> H6[Validate and Update PDO Data]
-    H6 --> H7[Unlock Mutex]
+    H4 --> H7[Unlock Mutex]
 
     H7 --> H8[Send Ethernet Frames]
     H8 --> H1
@@ -38,15 +35,20 @@ flowchart TD
     %% =====================
     G --> G1{{FMU Loop}}
 
-    G1 --> G2[Lock Mutex]
-    G2 --> G3[Read PDO Output Mappings]
-    G3 --> G4[Execute FMU Step]
-    G4 --> G5[Write FMU Inputs to PDO]
-    G5 --> G6[Unlock Mutex]
+    G1 --> G2[Execute PDO Output Mappings]
+    G2 --> G3[Lock Mutex]
+    G3 --> G4[Read PDO Outputs and Write to FMU Inputs]
+    G4 --> G5[Unlock Mutex]
 
-    G6 --> G7[Update Simulation Time]
-    G7 --> G8[Sleep Until Next Cycle]
-    G8 --> G1
+    G5 --> G6[Execute FMU Step]
+
+    G6 --> G8[Execute PDO Input Mappings]
+    G8 --> G9[Lock Mutex]
+    G9 --> G10[Read FMU Outputs and Write to PDO Inputs]
+    G10 --> G11[Unlock Mutex]
+
+    G11 --> G12[Sleep Until Next Cycle]
+    G12 --> G1
 
     %% =====================
     %% SHUTDOWN
