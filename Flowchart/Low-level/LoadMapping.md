@@ -1,31 +1,34 @@
 graph TD
 
-    A[LoadMapping Called] --> B[Loop Through JSON Mappings]
+    L1[Loop Through JSON Mappings] --> L2[Read FMU Variable Name]
+    L2 --> L3[Read PDO Name]
 
-    B --> C[Read FMU Variable Name and PDO Name]
-    C --> D[Get FMU Value Reference]
-    D --> E[Set mapping_found = false]
+    L3 --> L4[Get FMU Variable by Name]
+    L4 --> L5[Get FMU Value Reference]
 
-    E --> F[Loop Through EtherCAT Objects]
-    F --> G[Loop Through Object Entries]
+    L5 --> L6[Set mapping_found false]
 
-    G --> H{PDO Entry Name Matches?}
+    L6 --> L7[Loop Through EtherCAT Objects]
+    L7 --> L8[Loop Through Object Entries]
 
-    H -- Yes --> I[Create Mapping Struct]
-    I --> J[Push Mapping into Mapping Vector]
-    J --> K[Set mapping_found = true]
-    K --> L[Break Entry Loop]
+    L8 --> L9{entry.description equals PDO Name?}
 
-    H -- No --> G
+    L9 -- Yes --> L10[Create Mapping Struct with Slave Index]
+    L10 --> L11[Push Mapping into Mapping Vector]
+    L11 --> L12[Set mapping_found true]
+    L12 --> L13[Break Entry Loop]
 
-    L --> M{mapping_found?}
-    M -- Yes --> N[Break Object Loop]
-    M -- No --> F
+    L9 -- No --> L8
 
-    N --> O{mapping_found == false?}
+    L13 --> L14{mapping_found?}
 
-    O -- Yes --> P[Throw PDO Entry Not Found Error]
-    O -- No --> Q{More JSON Mappings?}
+    L14 -- Yes --> L15[Break Object Loop]
+    L14 -- No --> L7
 
-    Q -- Yes --> B
-    Q -- No --> R[Return]
+    L15 --> L16{mapping_found false?}
+
+    L16 -- Yes --> L17[Throw PDO Entry Not Found Error]
+    L16 -- No --> L18{More JSON Mappings?}
+
+    L18 -- Yes --> L1
+    L18 -- No --> L19[Return]

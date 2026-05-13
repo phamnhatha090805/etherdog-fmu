@@ -3,15 +3,27 @@ flowchart TD
     %% =====================
     %% MAIN FLOW
     %% =====================
-    A[main] --> C
+    A[main] --> C[StartNetworks]
 
-    C[Initialize EtherCAT Network]
-    C --> C2[Open Socket and Start Slaves]
+    C --> C1[Parse -f Config.json Argument]
+    C1 --> C2[Read Main Config JSON]
 
-    C2 --> D[Load FMU]
+    C2 --> C3[Read network interface and fmuPath from Config.json]
+    C3 --> C4[Read slaves Array from Config.json]
 
-    D --> E[Setup FMU ↔ PDO Mapping]
-    E --> F[Initialize FMU Simulation]
+    C4 --> C7[Create each EtherCAT Slaves from Config.json]
+
+    C7 --> C8[Open Socket]
+    C8 --> C9[Start Slaves]
+
+    C9 --> D[Load FMU from fmuPath]
+
+    D --> E[Setup FMU ↔ PDO Mappings]
+    E --> E1[Loop Through Each Slave Config]
+    E1 --> E2[Get Slave Dictionary]
+    E2 --> E3[Load Input and Output Mappings per Slave]
+
+    E3 --> F[Initialize FMU Simulation]
 
     F --> G[Start FMU Thread]
     F --> H[Start EtherCAT Main Loop]
@@ -21,13 +33,14 @@ flowchart TD
     %% =====================
     H --> H1{{EtherCAT Loop}}
 
-    H1 --> H2[Receive Ethernet Frames]
-
+    H1 --> H2[Receive Ethernet Frame]
     H2 --> H3[Lock Mutex]
     H3 --> H4[Process EtherCAT Datagrams]
-    H4 --> H7[Unlock Mutex]
+    H4 --> H5[Run Slave Routine]
+    H5 --> H6[Validate Output Data if SAFE_OP]
+    H6 --> H7[Unlock Mutex]
 
-    H7 --> H8[Send Ethernet Frames]
+    H7 --> H8[Send Ethernet Frame]
     H8 --> H1
 
     %% =====================

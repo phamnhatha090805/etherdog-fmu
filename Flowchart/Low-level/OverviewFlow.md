@@ -4,127 +4,199 @@ graph TD
 %% PROGRAM START
 %% =========================
 
-    A[Program Start] --> B[StartNetworks & Load FMU]
-    B --> E[SetupMappingFile & Open Mapping JSON]
+    A[Program Start] --> C[StartNetworks argc argv]
+
+    C --> C1[Parse -f Config.json]
+    C1 --> C2[Open Main Config File]
+
+    C2 --> C3{Config File Opened?}
+
+    C3 -- No --> C4[Print Error and Return]
+
+    C3 -- Yes --> C5[Parse Main Config JSON]
+
+    C5 --> C7[Read interface & Read fmuPath]
+    C7 --> C8[Get slaves Array]
+
+%% =========================
+%% START NETWORKS
+%% =========================
+
+    subgraph StartNetworks [StartNetworks]
+        C8 --> S1[Reserve ESC PDO Slave Mailbox Vectors]
+
+        S1 --> S2[Loop Through slaves Array]
+
+        S2 --> S3[Read EEPROM Path from Slave Config]
+        S3 --> S4[Create EmulatedESC]
+
+        S4 --> S5[Create PDO]
+        S5 --> S6[Create Slave]
+
+        S6 --> S7{coe_xml Exists?}
+
+        S7 -- Yes --> S8[Read CoE XML Path]
+        S8 --> S9[Create Mailbox]
+        S9 --> S10[Load Devices from CoE XML]
+        S10 --> S11[Read Vendor ID Product Code Revision Number]
+        S11 --> S12[Find Matching Device]
+        S12 --> S14[Enable CoE Dictionary]
+        S14 --> S15[Store Mailbox]
+
+        S7 -- No --> S16[Skip Mailbox Setup]
+
+        S15 --> S17[Create Input PDO Memory]
+        S16 --> S17
+
+        S17 --> S19[Create Output PDO Memory]
+
+        S19 --> S20[Store ESC PDO Slave]
+        S20 --> S21{More Slaves?}
+
+        S21 -- Yes --> S2
+        S21 -- No --> S23[Open Socket Using interface]
+        S23 --> S24[Start All Slaves]
+    end
+
+    S24 --> D4[Load FMU from fmuPath]
+
+    D4 --> E[SetupMappingFile]
 
 %% =========================
 %% SETUP MAPPING FILE
 %% =========================
 
     subgraph SetupMappingFile [SetupMappingFile]
-        E --> E1{File Opened?}
+        E --> E1[Get slaves Array from main_config]
 
-        E1 -- No --> E2[Print Error]
-        E2 --> E3[Return]
+        E1 --> E2[Loop Through Each Slave Config by Index i]
 
-        E1 -- Yes --> E4[Parse JSON & Get EtherCAT Dictionary]
+        E2 --> E3{Mailbox Exists for Slave i?}
 
-        E4 --> E5[Get input-mappings]
-        E5 --> E6[LoadMapping for input_mappings]
+        E3 -- No --> E4[Print Warning and Continue]
 
-        E5 --> E7[Get output-mappings]
-        E7 --> E8[LoadMapping for output_mappings]
+        E3 -- Yes --> E5[Get EtherCAT Dictionary from mailboxes i]
+
+        E5 --> E6{input-mappings Exists?}
+
+        E6 -- Yes --> E7[Get input-mappings]
+        E7 --> E8[LoadMapping for input_mappings with slave index i]
+
+        E6 -- No --> E9[Skip Input Mapping]
+
+        E8 --> E10{output-mappings Exists?}
+        E9 --> E10
+
+        E10 -- Yes --> E11[Get output-mappings]
+        E11 --> E12[LoadMapping for output_mappings with slave index i]
+
+        E10 -- No --> E13[Skip Output Mapping]
+
+        E12 --> E14{More Slave Configs?}
+        E13 --> E14
+
+        E14 -- Yes --> E2
+        E14 -- No --> E15[Return]
     end
 
 %% =========================
-%% LOAD MAPPING FUNCTION
+%% START FMU AND RUNTIME
 %% =========================
 
-    subgraph LoadMapping [LoadMapping]
-        L1[Loop Through JSON Mappings] --> L2[Read FMU Variable Name and PDO Name & Get FMU Value Reference.]
-        L2 --> L3[Set mapping_found = false]
+    E15 --> F3[Start FMU Simulation]
 
-        L3 --> L4[Loop Through EtherCAT Objects]
-        L4 --> L5[Loop Through Object Entries]
+    F3 --> G[Create FMU Thread]
+    G --> H[Start EtherCAT Main Loop]
 
-        L5 --> L6{entry.description == PDO Name?}
+%% =========================
+%% ETHERCAT MAIN LOOP
+%% =========================
 
-        L6 -- Yes --> L7[Create Mapping Struct & Push Mapping into Mapping Vector & Set mapping_found = true]
-        L7 --> L8[Break Entry Loop]
+    subgraph EtherCATMainLoop [EtherCAT Main Loop]
+        H --> H2[FrameHandler Loop]
 
-        L6 -- No --> L5
+        H2 --> H3[Receive EtherCAT Frame]
+        H3 --> H4[Lock Mutex]
 
-        L8 --> L9{mapping_found?}
-        L9 -- Yes --> L10[Break Object Loop]
-        L9 -- No --> L4
+        H4 --> H5[Process EtherCAT Datagrams]
+        H5 --> H6[Run Slave Routine for Each Slave]
 
-        L10 --> L11{mapping_found == false?}
-        L11 -- Yes --> L12[Throw PDO Entry Not Found Error]
-        L11 -- No --> L13{More JSON Mappings?}
+        H6 --> H7{Slave in SAFE_OP?}
+        H7 -- Yes --> H8{Output PDO Valid?}
+        H8 -- Yes --> H9[Validate Output Data]
+        H8 -- No --> H10[Skip Validation]
 
-        L13 -- Yes --> L1
-        L13 -- No --> L15[Return]
+        H7 -- No --> H10
+
+        H9 --> H11[Unlock Mutex]
+        H10 --> H11
+
+        H11 --> H12[Send EtherCAT Response]
+        H12 --> H2
     end
 
-    E6 --> L1
-    E8 --> L1
-
 %% =========================
-%% START RUNTIME
+%% FMU THREAD LOOP
 %% =========================
 
-    E --> F[Start FMU]
-    F --> G[Runtime Loop]
+    subgraph FMUThreadLoop [FMU Thread Loop]
+        G --> G1[Loop Forever]
+        G1 --> G2[Enter step]
 
-%% =========================
-%% RUNTIME LOOP
-%% =========================
+        G2 --> J[ExecutePdoOutputMappings]
 
-    subgraph RuntimeLoop [Runtime Flow]
-        G --> H[FrameHandler]
-        H --> H1[Receive EtherCAT Frame]
-
-        H1 --> H2[Lock Mutex]
-
-        H2 --> H5[Process Datagram]
-
-        H5 --> H13[Unlock Mutex]
-
-        H13 --> H14[Send EtherCAT Response]
-
-        H14 --> I[Step FMU Logic]
-
-        I --> J[ExecutePdoOutputMappings]
         J --> J1[Lock Mutex]
         J1 --> J2[Loop Through output_mappings]
+
         J2 --> J3{PDO Entry Mapped?}
 
-        J3 -- Yes --> J4[Copy Output PDO Data to FMU Inputs]
-        J3 -- No --> J5[Print Warning & Throw error]
+        J3 -- Yes --> J4[Copy Output PDO Data to Local FMU Input Value]
+        J3 -- No --> J5[Print Warning]
 
         J4 --> J6[Write Value to FMU Input]
+        J5 --> J6
 
         J6 --> J7{Write Successful?}
-        J7 -- No --> J8[Print Error]
-        J7 -- Yes --> J9[Print Mapping Info]
 
-        J9 --> J10{More output_mappings?}
+        J7 -- No --> J8[Print Error and Continue]
+        J7 -- Yes --> J9[Print Mapping Info with Slave Index]
+
+        J8 --> J10{More output_mappings?}
+        J9 --> J10
+
         J10 -- Yes --> J2
         J10 -- No --> J11[Unlock Mutex]
 
         J11 --> K[FMU Step]
+
         K --> K1{FMU Step Successful?}
 
         K1 -- No --> K2[Print Error and Return]
         K1 -- Yes --> K3[Update Simulation Time]
 
         K3 --> L[ExecutePdoInputMappings]
+
         L --> L20[Lock Mutex]
         L20 --> L21[Loop Through input_mappings]
+
         L21 --> L22[Read FMU Output Value]
 
         L22 --> L23{Read Successful?}
-        L23 -- No --> L24[Print Error]
+
+        L23 -- No --> L24[Print Error and Continue]
         L23 -- Yes --> L25{PDO Entry Mapped?}
 
         L25 -- Yes --> L26[Copy FMU Output to Input PDO Memory]
         L25 -- No --> L27[Print Warning]
 
-        L26 --> L28{More input_mappings?}
-        L27 --> L28
+        L26 --> L28[Print Mapping Info with Slave Index]
+        L27 --> L29{More input_mappings?}
+        L24 --> L29
+        L28 --> L29
 
-        L28 -- Yes --> L21
-        L28 -- No --> L29[Unlock Mutex]
+        L29 -- Yes --> L21
+        L29 -- No --> L30[Unlock Mutex]
 
-        L29 --> G
+        L30 --> L31[Sleep stepSize]
+        L31 --> G1
     end
