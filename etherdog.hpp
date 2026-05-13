@@ -32,7 +32,8 @@ namespace fs = std::filesystem;
 class EtherDOG
 {
 public:
-    void loadFMU(const std::string &fmu_path);
+    std::string fmu_path;
+    void loadFMU(const std::string &path);
     void start();
     void run();
     void step();
@@ -43,17 +44,26 @@ public:
     int StartNetworks(int argc, char *argv[]);
     void FrameHandler();
 
-    void SetupMapping();
+    void SetupMappingFile();
 
     const double stopTime = 10.0;
     const double stepSize = 0.1; // this is in seconds
+
+    struct Mapping
+    {
+        fmi2ValueReference vr; // FMU variable ID
+        size_t size;           // number of bytes
+        std::string PDOname;
+        size_t SlaveIndex;
+        std::string FMUname;
+        CoE::Entry &entry; // the CoE entry corresponding to this mapping, for debug/info purposes
+    };
 
 private:
     void ExecutePdoInputMappings();
     void ExecutePdoOutputMappings();
 
     double t;
-    // fmi2::fmu fmu;
     std::unique_ptr<fmi4cpp::fmi2::cs_fmu> cs_fmu;
     std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_md;
     std::unique_ptr<fmi4cpp::fmi2::cs_slave> fmu_slave;
@@ -66,20 +76,10 @@ private:
     std::vector<std::vector<uint8_t>> input_pdo;
     std::vector<std::vector<uint8_t>> output_pdo;
 
+    std::string config_file;
     std::string interface;
-    int slave_number = 0;
-    std::vector<std::string> slave_configs;
-    std::string mapping_file;
+    json main_config;
     std::vector<nanoseconds> stats;
-
-    struct Mapping
-    {
-        fmi2ValueReference vr; // FMU variable ID
-        size_t size;           // number of bytes
-        std::string PDOname;
-        std::string FMUname;
-        CoE::Entry &entry; // the CoE entry corresponding to this mapping, for debug/info purposes
-    };
 
     std::vector<Mapping> input_mappings;
     std::vector<Mapping> output_mappings;
