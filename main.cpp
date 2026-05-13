@@ -16,8 +16,7 @@ int main(int argc, char *argv[])
     try
     {
         etherdog.StartNetworks(argc, argv);
-        const std::string fmu_path = "/home/etherdog/fmu_test/TestEC2-1.fmu";
-        etherdog.loadFMU(fmu_path);
+        etherdog.loadFMU(etherdog.fmu_path);
         etherdog.SetupMappingFile();
     }
     catch (const std::exception &e)

@@ -1,25 +1,25 @@
 {
     "interface": "eth0",
-    "fmuPath": "/home/etherdog/etherdog-fmu/Examples/FmuModel/TestEC2-1.fmu",
+    "fmuPath": "/home/etherdog/etherdog-fmu/Examples/FmuModel/SimConfig-1.fmu",
     "slaves": [
         {
-            "eeprom": "Box 1 (CustomEC).bin",
-            "coe_xml": "CustomEC.xml",
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/Box 1 (CustomEC).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/CustomEC.xml",
             "input-mappings": {
-                "Out3": "AnalogIN0",
-                "Out4": "AnalogIN1"
+                "Out1": "AnalogIN0",
+                "Out2": "AnalogIN1"
             },
             "output-mappings": {
-                "In1": "AnalogOUT0",
-                "In2": "AnalogOUT1"
+                "In3": "AnalogOUT0",
+                "In4": "AnalogOUT1"
             }
         },
         {
-            "eeprom": "Box 1 (CustomEC1).bin",
-            "coe_xml": "CustomEC1.xml",
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/Box 1 (CustomEC1).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/CustomEC1.xml",
             "input-mappings": {
-                "Out5": "AnalogIN0",
-                "Out6": "AnalogIN1"
+                "Out3": "AnalogIN0",
+                "Out4": "AnalogIN1"
             },
             "output-mappings": {
                 "In1": "AnalogOUT0",
