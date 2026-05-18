@@ -271,6 +271,173 @@ void EtherDOG::SetupMappingFile()
     }
 }
 
+void WriteFmuToPdo(const EtherDOG::Mapping &m, double fmu_value)
+{
+    // This function
+
+    using namespace kickcat::CoE;
+
+    switch (m.entry.type)
+    {
+    case DataType::REAL64: // Also LREAL
+    {
+        // REAL64 type
+        double value_to_write = fmu_value; // Assuming fmu_value is already a double
+        std::memcpy(m.entry.data, &value_to_write, sizeof(value_to_write));
+        break;
+    }
+
+    case DataType::REAL32: // Also REAL
+    {
+        // REAL32 type
+        float value_to_write = static_cast<float>(fmu_value); // Convert double to float
+        std::memcpy(m.entry.data, &value_to_write, sizeof(value_to_write));
+        break;
+    }
+
+    case DataType::INTEGER8: // Also SINT
+    {
+        // INTEGER8 type
+        int8_t value_to_write = static_cast<int8_t>(fmu_value); // Convert double to int8_t
+        std::memcpy(m.entry.data, &value_to_write, sizeof(value_to_write));
+        break;
+    }
+
+    case DataType::UNSIGNED8:
+    case DataType::BYTE:
+    {
+        // UNSIGNED8 type
+        uint8_t value_to_write = static_cast<uint8_t>(fmu_value); // Convert double to uint8_t
+        std::memcpy(m.entry.data, &value_to_write, sizeof(value_to_write));
+        break;
+    }
+
+    case DataType::INTEGER16: // Also INT
+    {
+        // INTEGER16 type
+        int16_t value_to_write = static_cast<int16_t>(fmu_value); // Convert double to int16_t
+        std::memcpy(m.entry.data, &value_to_write, sizeof(value_to_write));
+        break;
+    }
+
+    case DataType::UNSIGNED16:
+    case DataType::WORD:
+    {
+        // UNSIGNED16 type
+        uint16_t value_to_write = static_cast<uint16_t>(fmu_value); // Convert double to uint16_t
+        std::memcpy(m.entry.data, &value_to_write, sizeof(value_to_write));
+        break;
+    }
+
+    case DataType::INTEGER32: // Also DINT
+    {
+        // INTEGER32 type
+        int32_t value_to_write = static_cast<int32_t>(fmu_value); // Convert double to int32_t
+        std::memcpy(m.entry.data, &value_to_write, sizeof(value_to_write));
+        break;
+    }
+
+    case DataType::UNSIGNED32:
+    case DataType::DWORD:
+    {
+        // UNSIGNED32 type
+        uint32_t value_to_write = static_cast<uint32_t>(fmu_value); // Convert double to uint32_t
+        std::memcpy(m.entry.data, &value_to_write, sizeof(value_to_write));
+        break;
+    }
+
+    default:
+    {
+        std::cerr << "Unsupported data type for mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "'. Data type: " << toString(m.entry.type) << std::endl;
+        throw std::runtime_error("Unsupported data type for mapping FMU variable '" + m.FMUname + "' to PDO variable '" + m.PDOname + "'.");
+    }
+    }
+}
+
+double ReadPdoToFmu(const EtherDOG::Mapping &m)
+{
+    // This function reads the value from the PDO memory based on the mapping and converts it to double to be written to the FMU variable.
+
+    using namespace kickcat::CoE;
+
+    switch (m.entry.type)
+    {
+    case DataType::REAL64: // Also LREAL
+    {
+        // REAL64 type
+        double value;
+        std::memcpy(&value, m.entry.data, sizeof(value));
+        return value;
+    }
+
+    case DataType::REAL32: // Also REAL
+    {
+        // REAL32 type
+        float value;
+        std::memcpy(&value, m.entry.data, sizeof(value));
+        return static_cast<double>(value); // Convert float to double
+    }
+
+    case DataType::INTEGER8: // Also SINT
+    {
+        // INTEGER8 type
+        int8_t value;
+        std::memcpy(&value, m.entry.data, sizeof(value));
+        return static_cast<double>(value); // Convert int8_t to double
+    }
+
+    case DataType::UNSIGNED8:
+    case DataType::BYTE:
+    {
+        // UNSIGNED8 type
+        uint8_t value;
+        std::memcpy(&value, m.entry.data, sizeof(value));
+        return static_cast<double>(value); // Convert uint8_t to double
+    }
+
+    case DataType::INTEGER16:
+    {
+        // INTEGER16 type
+        int16_t value;
+        std::memcpy(&value, m.entry.data, sizeof(value));
+        return static_cast<double>(value); // Convert int16_t to double
+    }
+
+    case DataType::UNSIGNED16:
+    case DataType::WORD:
+    {
+        // UNSIGNED16 type
+        uint16_t value;
+        std::memcpy(&value, m.entry.data, sizeof(value));
+        return static_cast<double>(value); // Convert uint16_t to double
+    }
+
+    case DataType::INTEGER32: // Also DINT
+    {
+        // INTEGER32 type
+        int32_t value;
+        std::memcpy(&value, m.entry.data, sizeof(value));
+        return static_cast<double>(value); // Convert int32_t to double
+    }
+
+    case DataType::UNSIGNED32:
+    case DataType::DWORD:
+    {
+        // UNSIGNED32 type
+        uint32_t value;
+        std::memcpy(&value, m.entry.data, sizeof(value));
+        return static_cast<double>(value); // Convert uint32_t to double
+    }
+
+    default:
+    {
+        std::cerr << "Unsupported data type for mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "'. Data type: " << toString(m.entry.type) << std::endl;
+        throw std::runtime_error("Unsupported data type for mapping PDO variable '" + m.PDOname + "' to FMU variable '" + m.FMUname + "'.");
+        return 0.0;
+    }
+    }
+}
+
 void EtherDOG::ExecutePdoInputMappings()
 {
     //  This function can be called in Step() after stepping the FMU to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
@@ -288,7 +455,7 @@ void EtherDOG::ExecutePdoInputMappings()
 
         if (m.entry.is_mapped)
         {
-            std::memcpy(m.entry.data, &fmu_output, m.size); // Copy bytes from FMU variable into PDO memory
+            WriteFmuToPdo(m, fmu_output); // Write the FMU variable value to the PDO memory based on the mapping
             std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
         }
         else
@@ -310,7 +477,7 @@ void EtherDOG::ExecutePdoOutputMappings()
 
         if (m.entry.is_mapped)
         {
-            std::memcpy(&fmu_input, m.entry.data, m.size); // Copy PDO bytes into local variable
+            fmu_input = ReadPdoToFmu(m); // Read the value from the PDO memory based on the mapping and convert it to double to be written to the FMU variable
         }
         else
         {
