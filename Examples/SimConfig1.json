@@ -1,0 +1,30 @@
+{
+    "interface": "eth0",
+    "fmuPath": "/home/etherdog/etherdog-fmu/Examples/FmuModel/SimConfig1-1.fmu",
+    "slaves": [
+        {
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/Box 1 (CustomEC).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/CustomEC.xml",
+            "input-mappings": {
+                "Out1": "AnalogIN0",
+                "Out2": "AnalogIN1"
+            },
+            "output-mappings": {
+                "In3": "AnalogOUT0",
+                "In4": "AnalogOUT1"
+            }
+        },
+        {
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/Box 1 (CustomEC1).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/CustomEC1.xml",
+            "input-mappings": {
+                "Out3": "AnalogIN0",
+                "Out4": "AnalogIN1"
+            },
+            "output-mappings": {
+                "In1": "AnalogOUT0",
+                "In2": "AnalogOUT1"
+            }
+        }
+    ]
+}
