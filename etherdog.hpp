@@ -49,6 +49,13 @@ public:
     const double stopTime = 10.0;
     const double stepSize = 0.1; // this is in seconds
 
+    enum class FmuVariableType
+    {
+        REAL,
+        INTEGER32,
+        BOOLEAN,
+    };
+
     struct Mapping
     {
         fmi2ValueReference vr; // FMU variable ID
@@ -56,6 +63,7 @@ public:
         std::string PDOname;
         size_t SlaveIndex;
         std::string FMUname;
+        FmuVariableType fmuVarType;
         CoE::Entry &entry; // the CoE entry corresponding to this mapping, for debug/info purposes
     };
 
