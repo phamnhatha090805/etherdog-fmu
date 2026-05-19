@@ -15,8 +15,8 @@
 		</Groups>
 		<Devices>
 			<Device Physics="YY">
-				<Type ProductCode="#x00000001" RevisionNo="#x00000004">TestWORD</Type>
-				<Name>TestWORD</Name>
+				<Type ProductCode="#x00000001" RevisionNo="#x00000007">EtherDOG</Type>
+				<Name>EtherDOG</Name>
 				<Info>
 					<StateMachine>
 						<Timeout>
@@ -67,8 +67,36 @@
 								<BitSize>1</BitSize>
 							</DataType>
 							<DataType>
+								<Name>LREAL</Name>
+								<BitSize>64</BitSize>
+							</DataType>
+							<DataType>
+								<Name>REAL</Name>
+								<BitSize>32</BitSize>
+							</DataType>
+							<DataType>
+								<Name>SINT</Name>
+								<BitSize>8</BitSize>
+							</DataType>
+							<DataType>
+								<Name>BYTE</Name>
+								<BitSize>8</BitSize>
+							</DataType>
+							<DataType>
+								<Name>INT</Name>
+								<BitSize>16</BitSize>
+							</DataType>
+							<DataType>
 								<Name>WORD</Name>
 								<BitSize>16</BitSize>
+							</DataType>
+							<DataType>
+								<Name>DWORD</Name>
+								<BitSize>32</BitSize>
+							</DataType>
+							<DataType>
+								<Name>DINT</Name>
+								<BitSize>32</BitSize>
 							</DataType>
 							<DataType>
 								<Name>DT1018</Name>
@@ -160,7 +188,7 @@
 							</DataType>
 							<DataType>
 								<Name>DT1601</Name>
-								<BitSize>80</BitSize>
+								<BitSize>336</BitSize>
 								<SubItem>
 									<SubIdx>0</SubIdx>
 									<Name>SubIndex 000</Name>
@@ -193,10 +221,98 @@
 										<Access>ro</Access>
 									</Flags>
 								</SubItem>
+								<SubItem>
+									<SubIdx>3</SubIdx>
+									<Name>SubIndex 003</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x7010.3</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>80</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>4</SubIdx>
+									<Name>SubIndex 004</Name>
+									<Type>UDINT</Type>
+									<Comment>Padding entry (15Bit)</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>112</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>5</SubIdx>
+									<Name>SubIndex 005</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x7010.5</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>144</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>6</SubIdx>
+									<Name>SubIndex 006</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x7010.6</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>176</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>7</SubIdx>
+									<Name>SubIndex 007</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x7010.7</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>208</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>8</SubIdx>
+									<Name>SubIndex 008</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x7010.8</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>240</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>9</SubIdx>
+									<Name>SubIndex 009</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x7010.9</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>272</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>10</SubIdx>
+									<Name>SubIndex 010</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x7010.10</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>304</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
 							</DataType>
 							<DataType>
 								<Name>DT1A00</Name>
-								<BitSize>80</BitSize>
+								<BitSize>336</BitSize>
 								<SubItem>
 									<SubIdx>0</SubIdx>
 									<Name>SubIndex 000</Name>
@@ -225,6 +341,94 @@
 									<Comment>Reference to 0x6000.2</Comment>
 									<BitSize>32</BitSize>
 									<BitOffs>48</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>3</SubIdx>
+									<Name>SubIndex 003</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x6000.3</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>80</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>4</SubIdx>
+									<Name>SubIndex 004</Name>
+									<Type>UDINT</Type>
+									<Comment>Padding entry (15Bit)</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>112</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>5</SubIdx>
+									<Name>SubIndex 005</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x6000.5</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>144</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>6</SubIdx>
+									<Name>SubIndex 006</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x6000.6</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>176</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>7</SubIdx>
+									<Name>SubIndex 007</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x6000.7</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>208</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>8</SubIdx>
+									<Name>SubIndex 008</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x6000.8</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>240</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>9</SubIdx>
+									<Name>SubIndex 009</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x6000.9</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>272</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>10</SubIdx>
+									<Name>SubIndex 010</Name>
+									<Type>UDINT</Type>
+									<Comment>Reference to 0x6000.10</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>304</BitOffs>
 									<Flags>
 										<Access>ro</Access>
 									</Flags>
@@ -596,7 +800,7 @@
 							</DataType>
 							<DataType>
 								<Name>DT6000</Name>
-								<BitSize>48</BitSize>
+								<BitSize>240</BitSize>
 								<SubItem>
 									<SubIdx>0</SubIdx>
 									<Name>SubIndex 000</Name>
@@ -610,9 +814,9 @@
 								<SubItem>
 									<SubIdx>1</SubIdx>
 									<Name>AnalogIN0</Name>
-									<Type>WORD</Type>
+									<Type>LREAL</Type>
 									<Comment>Analog Input 0</Comment>
-									<BitSize>16</BitSize>
+									<BitSize>64</BitSize>
 									<BitOffs>16</BitOffs>
 									<Flags>
 										<Access>ro</Access>
@@ -622,10 +826,94 @@
 								<SubItem>
 									<SubIdx>2</SubIdx>
 									<Name>AnalogIN1</Name>
-									<Type>WORD</Type>
+									<Type>REAL</Type>
 									<Comment>Analog Input 1</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>80</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+										<PdoMapping>t</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>3</SubIdx>
+									<Name>AnalogIN3</Name>
+									<Type>BOOL</Type>
+									<Comment>Analog Input 2</Comment>
+									<BitSize>1</BitSize>
+									<BitOffs>112</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+										<PdoMapping>t</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>5</SubIdx>
+									<Name>AnalogIN5</Name>
+									<Type>SINT</Type>
+									<Comment>Analog Input 4</Comment>
+									<BitSize>8</BitSize>
+									<BitOffs>128</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+										<PdoMapping>t</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>6</SubIdx>
+									<Name>AnalogIN6</Name>
+									<Type>BYTE</Type>
+									<Comment>Analog Input 5</Comment>
+									<BitSize>8</BitSize>
+									<BitOffs>136</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+										<PdoMapping>t</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>7</SubIdx>
+									<Name>AnalogIN7</Name>
+									<Type>INT</Type>
+									<Comment>Analog Input 6</Comment>
 									<BitSize>16</BitSize>
-									<BitOffs>32</BitOffs>
+									<BitOffs>144</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+										<PdoMapping>t</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>8</SubIdx>
+									<Name>AnalogIN8</Name>
+									<Type>WORD</Type>
+									<Comment>Analog Input 7</Comment>
+									<BitSize>16</BitSize>
+									<BitOffs>160</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+										<PdoMapping>t</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>9</SubIdx>
+									<Name>AnalogIN9</Name>
+									<Type>DWORD</Type>
+									<Comment>Analog Input 8</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>176</BitOffs>
+									<Flags>
+										<Access>ro</Access>
+										<PdoMapping>t</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>10</SubIdx>
+									<Name>AnalogIN10</Name>
+									<Type>DINT</Type>
+									<Comment>Analog Input 9</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>208</BitOffs>
 									<Flags>
 										<Access>ro</Access>
 										<PdoMapping>t</PdoMapping>
@@ -634,7 +922,7 @@
 							</DataType>
 							<DataType>
 								<Name>DT7010</Name>
-								<BitSize>48</BitSize>
+								<BitSize>240</BitSize>
 								<SubItem>
 									<SubIdx>0</SubIdx>
 									<Name>SubIndex 000</Name>
@@ -648,9 +936,9 @@
 								<SubItem>
 									<SubIdx>1</SubIdx>
 									<Name>AnalogOUT0</Name>
-									<Type>WORD</Type>
+									<Type>LREAL</Type>
 									<Comment>Analog Output 0</Comment>
-									<BitSize>16</BitSize>
+									<BitSize>64</BitSize>
 									<BitOffs>16</BitOffs>
 									<Flags>
 										<Access>rw</Access>
@@ -660,10 +948,94 @@
 								<SubItem>
 									<SubIdx>2</SubIdx>
 									<Name>AnalogOUT1</Name>
-									<Type>WORD</Type>
+									<Type>REAL</Type>
 									<Comment>Analog Output 1</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>80</BitOffs>
+									<Flags>
+										<Access>rw</Access>
+										<PdoMapping>r</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>3</SubIdx>
+									<Name>AnalogOUT2</Name>
+									<Type>BOOL</Type>
+									<Comment>Analog Output 2</Comment>
+									<BitSize>1</BitSize>
+									<BitOffs>112</BitOffs>
+									<Flags>
+										<Access>rw</Access>
+										<PdoMapping>r</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>5</SubIdx>
+									<Name>AnalogOUT4</Name>
+									<Type>SINT</Type>
+									<Comment>Analog Output 4</Comment>
+									<BitSize>8</BitSize>
+									<BitOffs>128</BitOffs>
+									<Flags>
+										<Access>rw</Access>
+										<PdoMapping>r</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>6</SubIdx>
+									<Name>AnalogOUT5</Name>
+									<Type>BYTE</Type>
+									<Comment>Analog Output 5</Comment>
+									<BitSize>8</BitSize>
+									<BitOffs>136</BitOffs>
+									<Flags>
+										<Access>rw</Access>
+										<PdoMapping>r</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>7</SubIdx>
+									<Name>AnalogOUT6</Name>
+									<Type>INT</Type>
+									<Comment>Analog Output 6</Comment>
 									<BitSize>16</BitSize>
-									<BitOffs>32</BitOffs>
+									<BitOffs>144</BitOffs>
+									<Flags>
+										<Access>rw</Access>
+										<PdoMapping>r</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>8</SubIdx>
+									<Name>AnalogOUT7</Name>
+									<Type>WORD</Type>
+									<Comment>Analog Output 7</Comment>
+									<BitSize>16</BitSize>
+									<BitOffs>160</BitOffs>
+									<Flags>
+										<Access>rw</Access>
+										<PdoMapping>r</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>9</SubIdx>
+									<Name>AnalogOUT8</Name>
+									<Type>DWORD</Type>
+									<Comment>Analog Output 8</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>176</BitOffs>
+									<Flags>
+										<Access>rw</Access>
+										<PdoMapping>r</PdoMapping>
+									</Flags>
+								</SubItem>
+								<SubItem>
+									<SubIdx>10</SubIdx>
+									<Name>AnalogOUT9</Name>
+									<Type>DINT</Type>
+									<Comment>Analog Output 9</Comment>
+									<BitSize>32</BitSize>
+									<BitOffs>208</BitOffs>
 									<Flags>
 										<Access>rw</Access>
 										<PdoMapping>r</PdoMapping>
@@ -702,7 +1074,7 @@
 								<Type>STRING(8)</Type>
 								<BitSize>64</BitSize>
 								<Info>
-									<DefaultData>54657374574F5244</DefaultData>
+									<DefaultData>4574686572444F47</DefaultData>
 								</Info>
 								<Flags>
 									<Access>ro</Access>
@@ -759,7 +1131,7 @@
 									<SubItem>
 										<Name>Revision Number</Name>
 										<Info>
-											<DefaultData>04000000</DefaultData>
+											<DefaultData>07000000</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
@@ -810,24 +1182,72 @@
 								<Index>#x1601</Index>
 								<Name>Outputs process data mapping</Name>
 								<Type>DT1601</Type>
-								<BitSize>80</BitSize>
+								<BitSize>336</BitSize>
 								<Info>
 									<SubItem>
 										<Name>SubIndex 000</Name>
 										<Info>
-											<DefaultData>02</DefaultData>
+											<DefaultData>0A</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
 										<Name>SubIndex 001</Name>
 										<Info>
-											<DefaultData>10011070</DefaultData>
+											<DefaultData>40011070</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
 										<Name>SubIndex 002</Name>
 										<Info>
-											<DefaultData>10021070</DefaultData>
+											<DefaultData>20021070</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 003</Name>
+										<Info>
+											<DefaultData>01031070</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 004</Name>
+										<Info>
+											<DefaultData>0F000000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 005</Name>
+										<Info>
+											<DefaultData>08051070</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 006</Name>
+										<Info>
+											<DefaultData>08061070</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 007</Name>
+										<Info>
+											<DefaultData>10071070</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 008</Name>
+										<Info>
+											<DefaultData>10081070</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 009</Name>
+										<Info>
+											<DefaultData>20091070</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 010</Name>
+										<Info>
+											<DefaultData>200A1070</DefaultData>
 										</Info>
 									</SubItem>
 								</Info>
@@ -836,24 +1256,72 @@
 								<Index>#x1A00</Index>
 								<Name>Inputs process data mapping</Name>
 								<Type>DT1A00</Type>
-								<BitSize>80</BitSize>
+								<BitSize>336</BitSize>
 								<Info>
 									<SubItem>
 										<Name>SubIndex 000</Name>
 										<Info>
-											<DefaultData>02</DefaultData>
+											<DefaultData>0A</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
 										<Name>SubIndex 001</Name>
 										<Info>
-											<DefaultData>10010060</DefaultData>
+											<DefaultData>40010060</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
 										<Name>SubIndex 002</Name>
 										<Info>
-											<DefaultData>10020060</DefaultData>
+											<DefaultData>20020060</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 003</Name>
+										<Info>
+											<DefaultData>01030060</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 004</Name>
+										<Info>
+											<DefaultData>0F000000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 005</Name>
+										<Info>
+											<DefaultData>08050060</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 006</Name>
+										<Info>
+											<DefaultData>08060060</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 007</Name>
+										<Info>
+											<DefaultData>10070060</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 008</Name>
+										<Info>
+											<DefaultData>10080060</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 009</Name>
+										<Info>
+											<DefaultData>20090060</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>SubIndex 010</Name>
+										<Info>
+											<DefaultData>200A0060</DefaultData>
 										</Info>
 									</SubItem>
 								</Info>
@@ -1004,24 +1472,72 @@
 								<Index>#x6000</Index>
 								<Name>Inputs</Name>
 								<Type>DT6000</Type>
-								<BitSize>48</BitSize>
+								<BitSize>240</BitSize>
 								<Info>
 									<SubItem>
 										<Name>SubIndex 000</Name>
 										<Info>
-											<DefaultData>02</DefaultData>
+											<DefaultData>0A</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
 										<Name>AnalogIN0</Name>
 										<Info>
-											<DefaultData>0000</DefaultData>
+											<DefaultData>0000000000000000</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
 										<Name>AnalogIN1</Name>
 										<Info>
+											<DefaultData>00000000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogIN3</Name>
+										<Info>
+											<DefaultData>00</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogIN4</Name>
+										<Info>
 											<DefaultData>0000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogIN5</Name>
+										<Info>
+											<DefaultData>00</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogIN6</Name>
+										<Info>
+											<DefaultData>00</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogIN7</Name>
+										<Info>
+											<DefaultData>0000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogIN8</Name>
+										<Info>
+											<DefaultData>0000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogIN9</Name>
+										<Info>
+											<DefaultData>00000000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogIN10</Name>
+										<Info>
+											<DefaultData>00000000</DefaultData>
 										</Info>
 									</SubItem>
 								</Info>
@@ -1030,24 +1546,72 @@
 								<Index>#x7010</Index>
 								<Name>Outputs</Name>
 								<Type>DT7010</Type>
-								<BitSize>48</BitSize>
+								<BitSize>240</BitSize>
 								<Info>
 									<SubItem>
 										<Name>SubIndex 000</Name>
 										<Info>
-											<DefaultData>02</DefaultData>
+											<DefaultData>0A</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
 										<Name>AnalogOUT0</Name>
 										<Info>
-											<DefaultData>0000</DefaultData>
+											<DefaultData>0000000000000000</DefaultData>
 										</Info>
 									</SubItem>
 									<SubItem>
 										<Name>AnalogOUT1</Name>
 										<Info>
+											<DefaultData>00000000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogOUT2</Name>
+										<Info>
+											<DefaultData>00</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogOUT3</Name>
+										<Info>
 											<DefaultData>0000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogOUT4</Name>
+										<Info>
+											<DefaultData>00</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogOUT5</Name>
+										<Info>
+											<DefaultData>00</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogOUT6</Name>
+										<Info>
+											<DefaultData>0000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogOUT7</Name>
+										<Info>
+											<DefaultData>0000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogOUT8</Name>
+										<Info>
+											<DefaultData>00000000</DefaultData>
+										</Info>
+									</SubItem>
+									<SubItem>
+										<Name>AnalogOUT9</Name>
+										<Info>
+											<DefaultData>00000000</DefaultData>
 										</Info>
 									</SubItem>
 								</Info>
@@ -1060,24 +1624,78 @@
 				<Fmmu>MBoxState</Fmmu>
 				<Sm MinSize="#x24" MaxSize="#x80" DefaultSize="#x80" StartAddress="#x1000" ControlByte="#x26" Enable="1">MBoxOut</Sm>
 				<Sm MinSize="#x24" MaxSize="#x80" DefaultSize="#x80" StartAddress="#x1080" ControlByte="#x22" Enable="1">MBoxIn</Sm>
-				<Sm DefaultSize="4" StartAddress="#x1100" ControlByte="#x64" Enable="1">Outputs</Sm>
-				<Sm DefaultSize="4" StartAddress="#x1400" ControlByte="#x20" Enable="1">Inputs</Sm>
+				<Sm DefaultSize="28" StartAddress="#x1100" ControlByte="#x64" Enable="1">Outputs</Sm>
+				<Sm DefaultSize="28" StartAddress="#x1400" ControlByte="#x20" Enable="1">Inputs</Sm>
 				<RxPdo Fixed="true" Mandatory="true" Sm="2">
 					<Index>#x1601</Index>
 					<Name>Outputs process data mapping</Name>
 					<Entry>
 						<Index>#x7010</Index>
 						<SubIndex>1</SubIndex>
-						<BitLen>16</BitLen>
+						<BitLen>64</BitLen>
 						<Name>AnalogOUT0</Name>
-						<DataType>WORD</DataType>
+						<DataType>LREAL</DataType>
 					</Entry>
 					<Entry>
 						<Index>#x7010</Index>
 						<SubIndex>2</SubIndex>
-						<BitLen>16</BitLen>
+						<BitLen>32</BitLen>
 						<Name>AnalogOUT1</Name>
+						<DataType>REAL</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7010</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>AnalogOUT2</Name>
+						<DataType>BOOL</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<SubIndex>0</SubIndex>
+						<BitLen>15</BitLen>
+					</Entry>
+					<Entry>
+						<Index>#x7010</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>AnalogOUT4</Name>
+						<DataType>SINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7010</Index>
+						<SubIndex>6</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>AnalogOUT5</Name>
+						<DataType>BYTE</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7010</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>AnalogOUT6</Name>
+						<DataType>INT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7010</Index>
+						<SubIndex>8</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>AnalogOUT7</Name>
 						<DataType>WORD</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7010</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>32</BitLen>
+						<Name>AnalogOUT8</Name>
+						<DataType>DWORD</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7010</Index>
+						<SubIndex>10</SubIndex>
+						<BitLen>32</BitLen>
+						<Name>AnalogOUT9</Name>
+						<DataType>DINT</DataType>
 					</Entry>
 				</RxPdo>
 				<TxPdo Fixed="true" Mandatory="true" Sm="3">
@@ -1086,16 +1704,70 @@
 					<Entry>
 						<Index>#x6000</Index>
 						<SubIndex>1</SubIndex>
-						<BitLen>16</BitLen>
+						<BitLen>64</BitLen>
 						<Name>AnalogIN0</Name>
-						<DataType>WORD</DataType>
+						<DataType>LREAL</DataType>
 					</Entry>
 					<Entry>
 						<Index>#x6000</Index>
 						<SubIndex>2</SubIndex>
-						<BitLen>16</BitLen>
+						<BitLen>32</BitLen>
 						<Name>AnalogIN1</Name>
+						<DataType>REAL</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>AnalogIN3</Name>
+						<DataType>BOOL</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<SubIndex>0</SubIndex>
+						<BitLen>15</BitLen>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>AnalogIN5</Name>
+						<DataType>SINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>6</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>AnalogIN6</Name>
+						<DataType>BYTE</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>AnalogIN7</Name>
+						<DataType>INT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>8</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>AnalogIN8</Name>
 						<DataType>WORD</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>32</BitLen>
+						<Name>AnalogIN9</Name>
+						<DataType>DWORD</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>10</SubIndex>
+						<BitLen>32</BitLen>
+						<Name>AnalogIN10</Name>
+						<DataType>DINT</DataType>
 					</Entry>
 				</TxPdo>
 				<Mailbox DataLinkLayer="true">

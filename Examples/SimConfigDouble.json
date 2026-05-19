@@ -3,15 +3,15 @@
     "fmuPath": "/home/etherdog/etherdog-fmu/Examples/FmuModel/SimConfig-1.fmu",
     "slaves": [
         {
-            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/Box 1 (TestWORD).bin",
-            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/TestWORD.xml",
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/Box 1 (EtherDOG).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/EtherDOG.xml",
             "input-mappings": {
                 "Out1": "AnalogIN0",
                 "Out2": "AnalogIN1"
             },
             "output-mappings": {
-                "In1": "AnalogOUT0",
-                "In2": "AnalogOUT1"
+                "In3": "AnalogOUT0",
+                "In4": "AnalogOUT1"
             }
         }
     ]
