@@ -6,13 +6,29 @@
 #include "etherdog.hpp"
 
 #include <thread>
+#include <csignal>
 
 using namespace fmi4cpp;
 using namespace kickcat;
 
+EtherDOG *GlobalEtherDOG = nullptr; // Global instance of EtherDOG to be accessed in the signal handler
+
+void signalHandler(int signal)
+{
+    if (signal == SIGINT || signal == SIGTERM)
+    {
+        std::cout << "\nStop signal received, stopping simulation..." << std::endl;
+        if (GlobalEtherDOG != nullptr)
+        {
+            GlobalEtherDOG->requestStop();
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
     EtherDOG etherdog;
+    GlobalEtherDOG = &etherdog; // Set the global instance to the created EtherDOG object
     try
     {
         etherdog.StartNetworks(argc, argv);
@@ -28,7 +44,12 @@ int main(int argc, char *argv[])
     etherdog.start();
     std::thread fmu_thread(&EtherDOG::FmuThread, &etherdog);
     etherdog.run();
-    fmu_thread.join();
+    if (fmu_thread.joinable())
+    {
+        fmu_thread.join();
+    }
+    std::cout << "Simulation stopped gracefully." << std::endl;
     etherdog.stop();
+    std::cout << "Simulation terminated." << std::endl;
     return 0;
 }

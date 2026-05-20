@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <numeric>
 #include <mutex>
+#include <atomic>
 
 #include <fmi4cpp/fmi4cpp.hpp>
 #include <kickcat/KickCAT.h>
@@ -27,6 +28,7 @@ using namespace fmi4cpp;
 using namespace kickcat;
 using namespace kickcat::slave;
 using json = nlohmann::json;
+
 namespace fs = std::filesystem;
 
 class EtherDOG
@@ -38,6 +40,7 @@ public:
     void run();
     void step();
     void stop();
+    void requestStop();
 
     void FmuThread();
 
@@ -93,4 +96,6 @@ private:
     std::vector<Mapping> output_mappings;
 
     std::mutex fmu_mutex; // Mutex to protect access to FMU output variable
+
+    std::atomic<bool> running{true}; // Atomic flag to control the running state of the simulation, can be set to false to request stopping the simulation
 };

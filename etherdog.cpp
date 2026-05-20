@@ -443,7 +443,7 @@ void EtherDOG::start()
 
 void EtherDOG::run()
 {
-    while (true)
+    while (running)
     {
         FrameHandler();
     }
@@ -451,7 +451,7 @@ void EtherDOG::run()
 
 void EtherDOG::FmuThread()
 {
-    while (true)
+    while (running)
     {
         step();
         std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(stepSize * 1000)));
@@ -474,6 +474,13 @@ void EtherDOG::step()
     std::cout << "t=" << t << std::endl;
 
     ExecutePdoInputMappings(); // Call ExecutePdoInputMappings to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
+}
+
+void EtherDOG::requestStop()
+{
+    // This function can be called to request stopping the simulation by setting the running flag to false, which will cause the main loop in run() and FmuThread() to exit gracefully.
+
+    running = false;
 }
 
 void EtherDOG::stop()
