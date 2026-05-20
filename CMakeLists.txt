@@ -9,6 +9,7 @@ find_package(KickCAT CONFIG REQUIRED)
 add_executable(etherdog-fmu 
     main.cpp
     etherdog.cpp
+    PdoFmuConverter.cpp
 )
 
 target_compile_options(etherdog-fmu PRIVATE 

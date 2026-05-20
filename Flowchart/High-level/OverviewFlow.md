@@ -11,7 +11,7 @@ flowchart TD
     C2 --> C3[Read network interface and fmuPath from Config.json]
     C3 --> C4[Read slaves Array from Config.json]
 
-    C4 --> C7[Create each EtherCAT Slaves from Config.json]
+    C4 --> C7[Create each EtherCAT Slave from Config.json]
 
     C7 --> C8[Open Socket]
     C8 --> C9[Start Slaves]
@@ -19,11 +19,15 @@ flowchart TD
     C9 --> D[Load FMU from fmuPath]
 
     D --> E[Setup FMU ↔ PDO Mappings]
+
     E --> E1[Loop Through Each Slave Config]
     E1 --> E2[Get Slave Dictionary]
-    E2 --> E3[Load Input and Output Mappings per Slave]
+    E2 --> E3[Load Input and Output Mappings]
 
-    E3 --> F[Initialize FMU Simulation]
+    E3 --> E4[Detect FMU Variable Type]
+    E4 --> E5[Store Mapping with FMU Type and PDO Type]
+
+    E5 --> F[Initialize FMU Simulation]
 
     F --> G[Start FMU Thread]
     F --> H[Start EtherCAT Main Loop]
@@ -49,19 +53,25 @@ flowchart TD
     G --> G1{{FMU Loop}}
 
     G1 --> G2[Execute PDO Output Mappings]
+
     G2 --> G3[Lock Mutex]
-    G3 --> G4[Read PDO Outputs and Write to FMU Inputs]
-    G4 --> G5[Unlock Mutex]
+    G3 --> G4[Read PDO Values]
+    G4 --> G5[Convert PDO Data Type to FMU Variable Type]
+    G5 --> G6[Write Values to FMU Inputs]
+    G6 --> G7[Unlock Mutex]
 
-    G5 --> G6[Execute FMU Step]
+    G7 --> G8[Execute FMU Step]
 
-    G6 --> G8[Execute PDO Input Mappings]
-    G8 --> G9[Lock Mutex]
-    G9 --> G10[Read FMU Outputs and Write to PDO Inputs]
-    G10 --> G11[Unlock Mutex]
+    G8 --> G9[Execute PDO Input Mappings]
 
-    G11 --> G12[Sleep Until Next Cycle]
-    G12 --> G1
+    G9 --> G10[Lock Mutex]
+    G10 --> G11[Read FMU Outputs]
+    G11 --> G12[Convert FMU Variable Type to PDO Data Type]
+    G12 --> G13[Write Values to PDO Memory]
+    G13 --> G14[Unlock Mutex]
+
+    G14 --> G15[Sleep Until Next Cycle]
+    G15 --> G1
 
     %% =====================
     %% SHUTDOWN

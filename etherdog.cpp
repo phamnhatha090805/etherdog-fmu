@@ -1,5 +1,6 @@
 
 #include "etherdog.hpp"
+#include "PdoFmuConverter.hpp"
 #include <thread>
 
 CoE::Device findDeviceByVendorAndProduct(std::vector<CoE::Device> &&devices, uint32_t vendor_id, uint32_t product_code, uint32_t revision_number)
@@ -201,8 +202,33 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
         std::string fmu_var = i.key();
         std::string pdo_name = i.value().get<std::string>();
 
-        auto var = cs_md->get_variable_by_name(fmu_var).as_real();
-        auto vr = var.valueReference();
+        auto variable = cs_md->get_variable_by_name(fmu_var);
+        fmi2ValueReference vr;
+        EtherDOG::FmuVariableType fmuVarType;
+
+        if (variable.is_real())
+        {
+            auto var = variable.as_real();
+            vr = variable.value_reference;
+            fmuVarType = EtherDOG::FmuVariableType::REAL;
+        }
+        else if (variable.is_integer())
+        {
+            auto var = variable.as_integer();
+            vr = variable.value_reference;
+            fmuVarType = EtherDOG::FmuVariableType::INTEGER32;
+        }
+        else if (variable.is_boolean())
+        {
+            auto var = variable.as_boolean();
+            vr = variable.value_reference;
+            fmuVarType = EtherDOG::FmuVariableType::BOOLEAN;
+        }
+        else
+        {
+            std::cerr << "Unsupported FMU variable type for variable '" << fmu_var << "'. Skipping mapping for this variable." << std::endl;
+            continue; // Skip unsupported variable types
+        }
 
         bool mapping_found = false;
 
@@ -218,6 +244,7 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
                         pdo_name,
                         slave_index,
                         fmu_var,
+                        fmuVarType,
                         entry,
                     };
 
@@ -278,22 +305,59 @@ void EtherDOG::ExecutePdoInputMappings()
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : input_mappings)
     {
-        double fmu_output;
-
-        if (!fmu_slave->read_real(m.vr, fmu_output))
+        if (!m.entry.is_mapped)
         {
-            std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
-            continue;
-        }
-
-        if (m.entry.is_mapped)
-        {
-            std::memcpy(m.entry.data, &fmu_output, m.size); // Copy bytes from FMU variable into PDO memory
-            std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
+            std::cerr << "[Slave index " << m.SlaveIndex << "] " << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped. Skipping mapping for this entry." << std::endl;
         }
         else
         {
-            std::cerr << "[Slave index " << m.SlaveIndex << "] " << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped. Skipping mapping for this entry." << std::endl;
+            switch (m.fmuVarType)
+            {
+            case FmuVariableType::REAL:
+            {
+                double fmu_output;
+                if (!fmu_slave->read_real(m.vr, fmu_output))
+                {
+                    std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    continue;
+                }
+                WriteFmuDoubleToPdo(m, fmu_output);
+                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
+                break;
+            }
+
+            case FmuVariableType::INTEGER32:
+            {
+                int32_t fmu_output;
+                if (!fmu_slave->read_integer(m.vr, fmu_output))
+                {
+                    std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    continue;
+                }
+                WriteFmuIntToPdo(m, fmu_output);
+                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
+                break;
+            }
+
+            case FmuVariableType::BOOLEAN:
+            {
+                fmi2Boolean fmu_output;
+                if (!fmu_slave->read_boolean(m.vr, fmu_output))
+                {
+                    std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    continue;
+                }
+                WriteFmuBoolToPdo(m, fmu_output);
+                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
+                break;
+            }
+
+            default:
+            {
+                std::cerr << "Unsupported FMU variable type for variable '" << m.FMUname << "'. Skipping writing to PDO for this variable." << std::endl;
+                continue; // Skip unsupported variable types
+            }
+            }
         }
     }
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again
@@ -306,24 +370,51 @@ void EtherDOG::ExecutePdoOutputMappings()
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : output_mappings)
     {
-        double fmu_input;
-
-        if (m.entry.is_mapped)
-        {
-            std::memcpy(&fmu_input, m.entry.data, m.size); // Copy PDO bytes into local variable
-        }
-        else
+        if (!m.entry.is_mapped)
         {
             std::cerr << "[Slave index " << m.SlaveIndex << "] " << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped. Skipping mapping for this entry." << std::endl;
         }
-
-        if (!fmu_slave->write_real(m.vr, fmu_input))
+        else
         {
-            std::cerr << "Error writing FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
-            continue;
-        }
+            switch (m.fmuVarType)
+            {
+            case FmuVariableType::REAL:
+            {
+                double fmu_input = ReadPdoToFmuDouble(m);
+                if (!fmu_slave->write_real(m.vr, fmu_input))
+                {
+                    std::cerr << "Error writing FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    continue;
+                }
+                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "' value= " << fmu_input << std::endl;
+                break;
+            }
 
-        std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "' value= " << fmu_input << std::endl;
+            case FmuVariableType::INTEGER32:
+            {
+                int32_t fmu_input = ReadPdoToFmuInt(m);
+                if (!fmu_slave->write_integer(m.vr, fmu_input))
+                {
+                    std::cerr << "Error writing FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    continue;
+                }
+                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "' value= " << fmu_input << std::endl;
+                break;
+            }
+
+            case FmuVariableType::BOOLEAN:
+            {
+                fmi2Boolean fmu_input = ReadPdoToFmuBool(m);
+                if (!fmu_slave->write_boolean(m.vr, fmu_input))
+                {
+                    std::cerr << "Error writing FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    continue;
+                }
+                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "' value= " << fmu_input << std::endl;
+                break;
+            }
+            }
+        }
     }
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again
 }
