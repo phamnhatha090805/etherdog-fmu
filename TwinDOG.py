@@ -9,11 +9,10 @@ from PyQt5.QtWidgets import (
     QTextEdit, QVBoxLayout, QHBoxLayout, QFileDialog, QComboBox
 )
 
-# --- Helper: detect network interfaces ---
+
 def get_interfaces():
     try:
-        interfaces = os.listdir('/sys/class/net/')
-        return interfaces
+        return os.listdir("/sys/class/net/")
     except Exception:
         return ["eth0"]
 
@@ -22,45 +21,45 @@ class SimulatorGUI(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("KickCAT Network Simulator GUI")
-        self.setGeometry(200, 200, 600, 500)
+        self.setWindowTitle("TwinDOG Simulator GUI")
+        self.setGeometry(200, 200, 1200, 800)
 
-        # --- Interface dropdown ---
+        self.executable_label = QLabel("TwinDOG Executable:")
+        self.executable_input = QLineEdit()
+        self.executable_input.setText("/home/etherdog/etherdog-fmu/build/etherdog-fmu")
+        self.executable_browse_btn = QPushButton("Browse")
+        self.executable_browse_btn.clicked.connect(self.browse_executable)
+
         self.interface_label = QLabel("Network Interface:")
         self.interface_dropdown = QComboBox()
         self.interface_dropdown.addItems(get_interfaces())
 
-        # --- Slave count ---
-        self.slave_label = QLabel("Number of Slaves:")
-        self.slave_input = QLineEdit()
-        self.slave_input.setPlaceholderText("e.g. 5")
-
-        # --- JSON config ---
-        self.config_label = QLabel("Slave Config (.json):")
+        self.config_label = QLabel("Main Config JSON:")
         self.config_input = QLineEdit()
-        self.browse_btn = QPushButton("Browse")
-        self.browse_btn.clicked.connect(self.browse_file)
+        self.config_browse_btn = QPushButton("Browse")
+        self.config_browse_btn.clicked.connect(self.browse_config)
 
-        # --- Run button ---
         self.run_btn = QPushButton("Run Simulation")
         self.run_btn.clicked.connect(self.run_simulation)
 
-        # --- Output ---
         self.output = QTextEdit()
         self.output.setReadOnly(True)
 
-        # --- Layouts ---
         layout = QVBoxLayout()
 
-        layout.addWidget(self.interface_label)
-        layout.addWidget(self.interface_dropdown)
-
-        layout.addWidget(self.slave_label)
-        layout.addWidget(self.slave_input)
+        exe_layout = QHBoxLayout()
+        exe_layout.addWidget(self.executable_input)
+        exe_layout.addWidget(self.executable_browse_btn)
 
         config_layout = QHBoxLayout()
         config_layout.addWidget(self.config_input)
-        config_layout.addWidget(self.browse_btn)
+        config_layout.addWidget(self.config_browse_btn)
+
+        layout.addWidget(self.executable_label)
+        layout.addLayout(exe_layout)
+
+        layout.addWidget(self.interface_label)
+        layout.addWidget(self.interface_dropdown)
 
         layout.addWidget(self.config_label)
         layout.addLayout(config_layout)
@@ -70,75 +69,127 @@ class SimulatorGUI(QWidget):
 
         self.setLayout(layout)
 
-    # --- File picker ---
-    def browse_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select JSON file", "", "JSON Files (*.json)")
+    def browse_executable(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select etherdog-fmu executable",
+            "",
+            "Executable Files (*)"
+        )
+        if file_path:
+            self.executable_input.setText(file_path)
+
+    def browse_config(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select main Config.json",
+            "",
+            "JSON Files (*.json)"
+        )
         if file_path:
             self.config_input.setText(file_path)
 
-    # --- JSON validation ---
-    def validate_json(self, path):
+    def append_output(self, text):
+        self.output.append(text)
+        scrollbar = self.output.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def validate_config_json(self, path):
         try:
-            with open(path, 'r') as f:
-                json.load(f)
+            with open(path, "r") as f:
+                config = json.load(f)
+
+            required_top_level = ["interface", "fmuPath", "slaves"]
+            for key in required_top_level:
+                if key not in config:
+                    return False, f"Missing required field: {key}"
+
+            if not isinstance(config["slaves"], list):
+                return False, "'slaves' must be an array"
+
+            for index, slave in enumerate(config["slaves"]):
+                if "eeprom" not in slave:
+                    return False, f"Slave {index} is missing required field: eeprom"
+
+                if "coe_xml" not in slave:
+                    self.append_output(
+                        f"Warning: Slave {index} has no coe_xml, so PDO mapping dictionary may be unavailable"
+                    )
+
+                if "input-mappings" in slave and not isinstance(slave["input-mappings"], dict):
+                    return False, f"Slave {index}: input-mappings must be an object"
+
+                if "output-mappings" in slave and not isinstance(slave["output-mappings"], dict):
+                    return False, f"Slave {index}: output-mappings must be an object"
+
+            selected_interface = self.interface_dropdown.currentText()
+            config["interface"] = selected_interface
+
+            with open(path, "w") as f:
+                json.dump(config, f, indent=4)
+
             return True, ""
+
         except Exception as e:
             return False, str(e)
 
-    # --- Run simulator ---
     def run_simulation(self):
-        interface = self.interface_dropdown.currentText()
-        slaves = self.slave_input.text()
-        config = self.config_input.text()
+        executable = self.executable_input.text().strip()
+        config = self.config_input.text().strip()
 
-        # --- Input validation ---
-        if not slaves.isdigit():
-            self.output.append("Number of slaves must be an integer\n")
+        if not os.path.exists(executable):
+            self.append_output("Executable not found")
             return
 
         if not os.path.exists(config):
-            self.output.append("JSON file not found\n")
+            self.append_output("Config JSON file not found")
             return
 
-        valid, error = self.validate_json(config)
+        valid, error = self.validate_config_json(config)
         if not valid:
-            self.output.append(f"Invalid JSON: {error}\n")
+            self.append_output(f"Invalid Config JSON: {error}")
             return
 
-        # --- Command ---
         cmd = [
-
-            "/home/etherdog/etherdog-fmu/build/etherdog-fmu",
-            "-i", interface,
-            "-n", slaves,
-            "-s", config
+            executable,
+            "-f",
+            config
         ]
 
-        self.output.append(f"Running: {' '.join(cmd)}\n")
+        self.append_output(f"Running: {' '.join(cmd)}")
 
-        # Run in separate thread to avoid UI freeze
         thread = threading.Thread(target=self.execute_command, args=(cmd,))
+        thread.daemon = True
         thread.start()
 
-    # --- Execute command + live output ---
     def execute_command(self, cmd):
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
 
-        for line in process.stdout:
-            self.output.append(line)
+            for line in process.stdout:
+                self.append_output(line.rstrip())
 
-        process.wait()
-        self.output.append("\nSimulation finished\n")
+            process.wait()
+            self.append_output("Simulation finished")
+
+        except Exception as e:
+            self.append_output(f"Error while running simulation: {e}")
 
 
-# --- Run app ---
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = SimulatorGUI()
-    window.show()
+
+    # Maximized window with title bar
+    window.showMaximized()
+
+    # Use this instead if you want real fullscreen:
+    # window.showFullScreen()
+
     sys.exit(app.exec_())
