@@ -10,6 +10,9 @@ from PyQt5.QtWidgets import (
     QTextEdit, QVBoxLayout, QHBoxLayout, QFileDialog, QComboBox
 )
 
+from PyQt5.QtCore import (
+    pyqtSignal
+)
 
 def get_interfaces():
     try:
@@ -17,12 +20,14 @@ def get_interfaces():
     except Exception:
         return ["eth0"]
 
-
 class SimulatorGUI(QWidget):
+    output_signal = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
 
         self.process = None  # -- To keep track of the running simulation process
+        self.output_signal.connect(self.append_output)  # -- Connect the output signal to the append_output method
 
         self.setWindowTitle("TwinDOG Simulator GUI")
         self.setGeometry(200, 200, 1200, 800)
@@ -179,7 +184,7 @@ class SimulatorGUI(QWidget):
         if self.process is not None and self.process.poll() is None:
             self.append_output("Stopping simulation...")
             try:
-                self.process.terminate() # -- Send SIGTERM to the process group to allow for graceful shutdown
+                os.killpg(os.getpgid(self.process.pid), signal.SIGINT)
             except Exception as e:
                 self.append_output(f"Error while stopping simulation: {e}")
         else:
@@ -197,14 +202,14 @@ class SimulatorGUI(QWidget):
             )
 
             for line in self.process.stdout:
-                self.append_output(line.rstrip())
+                self.output_signal.emit(line.rstrip())
 
             self.process.wait()
             self.process = None
-            self.append_output("Simulation finished")
+            self.output_signal.emit("Simulation finished")
 
         except Exception as e:
-            self.append_output(f"Error while running simulation: {e}")
+            self.output_signal.emit(f"Error while running simulation: {e}")
 
 
 if __name__ == "__main__": # -- Main entry point to create the application and show the GUI
