@@ -3,6 +3,7 @@ import json
 import subprocess
 import threading
 import os
+import signal
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton,
@@ -21,15 +22,19 @@ class SimulatorGUI(QWidget):
     def __init__(self):
         super().__init__()
 
+        self.process = None  # -- To keep track of the running simulation process
+
         self.setWindowTitle("TwinDOG Simulator GUI")
         self.setGeometry(200, 200, 1200, 800)
 
+        # --- Executable Selection ---
         self.executable_label = QLabel("TwinDOG Executable:")
         self.executable_input = QLineEdit()
         self.executable_input.setText("/home/etherdog/etherdog-fmu/build/etherdog-fmu")
         self.executable_browse_btn = QPushButton("Browse")
         self.executable_browse_btn.clicked.connect(self.browse_executable)
 
+        # --- Network Interface Selection ---
         self.interface_label = QLabel("Network Interface:")
         self.interface_dropdown = QComboBox()
         self.interface_dropdown.addItems(get_interfaces())
@@ -39,37 +44,45 @@ class SimulatorGUI(QWidget):
         self.config_browse_btn = QPushButton("Browse")
         self.config_browse_btn.clicked.connect(self.browse_config)
 
+        # -- Run Button ---
         self.run_btn = QPushButton("Run Simulation")
         self.run_btn.clicked.connect(self.run_simulation)
 
+        # -- Stop Button ---
+        self.stop_btn = QPushButton("Stop Simulation")
+        self.stop_btn.clicked.connect(self.stop_simulation)
+
+        # -- Output Display ---
         self.output = QTextEdit()
         self.output.setReadOnly(True)
 
-        layout = QVBoxLayout()
+        # -- Layout ---
+        layout = QVBoxLayout() # -- Create a vertical layout for the main window
 
-        exe_layout = QHBoxLayout()
+        exe_layout = QHBoxLayout() # -- Create a horizontal layout for the executable input and browse button
         exe_layout.addWidget(self.executable_input)
         exe_layout.addWidget(self.executable_browse_btn)
 
-        config_layout = QHBoxLayout()
+        config_layout = QHBoxLayout() # -- Create a horizontal layout for the config input and browse button
         config_layout.addWidget(self.config_input)
         config_layout.addWidget(self.config_browse_btn)
 
-        layout.addWidget(self.executable_label)
-        layout.addLayout(exe_layout)
+        layout.addWidget(self.executable_label) # -- Add the executable label to the main layout
+        layout.addLayout(exe_layout) # -- Add the executable input and browse button layout to the main layout
 
-        layout.addWidget(self.interface_label)
-        layout.addWidget(self.interface_dropdown)
+        layout.addWidget(self.interface_label) # -- Add the network interface label to the main layout
+        layout.addWidget(self.interface_dropdown) # -- Add the network interface dropdown to the main layout
 
-        layout.addWidget(self.config_label)
-        layout.addLayout(config_layout)
+        layout.addWidget(self.config_label) # -- Add the config label to the main layout
+        layout.addLayout(config_layout) # -- Add the config input and browse button layout to the main layout
 
-        layout.addWidget(self.run_btn)
-        layout.addWidget(self.output)
+        layout.addWidget(self.run_btn) # -- Add the run button to the main layout
+        layout.addWidget(self.stop_btn) # -- Add the stop button to the main layout
+        layout.addWidget(self.output) # -- Add the output display to the main layout
 
-        self.setLayout(layout)
+        self.setLayout(layout) # -- Set the main layout for the window
 
-    def browse_executable(self):
+    def browse_executable(self): # -- Open a file dialog to select the TwinDOG executable
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select etherdog-fmu executable",
@@ -79,7 +92,7 @@ class SimulatorGUI(QWidget):
         if file_path:
             self.executable_input.setText(file_path)
 
-    def browse_config(self):
+    def browse_config(self): # -- Open a file dialog to select the main Config.json file
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select main Config.json",
@@ -89,12 +102,12 @@ class SimulatorGUI(QWidget):
         if file_path:
             self.config_input.setText(file_path)
 
-    def append_output(self, text):
+    def append_output(self, text): # -- Append text to the output display and scroll to the bottom
         self.output.append(text)
         scrollbar = self.output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
-    def validate_config_json(self, path):
+    def validate_config_json(self, path): # -- Validate the structure of the main Config.json file and update the selected network interface
         try:
             with open(path, "r") as f:
                 config = json.load(f)
@@ -133,7 +146,7 @@ class SimulatorGUI(QWidget):
         except Exception as e:
             return False, str(e)
 
-    def run_simulation(self):
+    def run_simulation(self): # -- Validate inputs, update the config JSON with the selected network interface, and run the TwinDOG simulation in a separate thread
         executable = self.executable_input.text().strip()
         config = self.config_input.text().strip()
 
@@ -162,27 +175,39 @@ class SimulatorGUI(QWidget):
         thread.daemon = True
         thread.start()
 
-    def execute_command(self, cmd):
+    def stop_simulation(self): # -- Stop the running simulation by sending a SIGINT signal to the process, or display a message if no simulation is running
+        if self.process is not None and self.process.poll() is None:
+            self.append_output("Stopping simulation...")
+            try:
+                self.process.terminate() # -- Send SIGTERM to the process group to allow for graceful shutdown
+            except Exception as e:
+                self.append_output(f"Error while stopping simulation: {e}")
+        else:
+            self.append_output("No simulation is currently running.")
+
+    def execute_command(self, cmd): # -- Run the given command in a subprocess and capture its output to display in the GUI
         try:
-            process = subprocess.Popen(
+            self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                start_new_session=True
             )
 
-            for line in process.stdout:
+            for line in self.process.stdout:
                 self.append_output(line.rstrip())
 
-            process.wait()
+            self.process.wait()
+            self.process = None
             self.append_output("Simulation finished")
 
         except Exception as e:
             self.append_output(f"Error while running simulation: {e}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # -- Main entry point to create the application and show the GUI
     app = QApplication(sys.argv)
     window = SimulatorGUI()
 
