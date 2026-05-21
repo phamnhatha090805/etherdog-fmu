@@ -125,7 +125,7 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
 
     auto [socket2, _] = createSockets(interface, "");
     socket = std::move(socket2);
-    socket->setTimeout(-1ns);
+    socket->setTimeout(1ns);
 
     stats.reserve(1000);
 
