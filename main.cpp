@@ -27,6 +27,8 @@ void signalHandler(int signal)
 
 int main(int argc, char *argv[])
 {
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
     EtherDOG etherdog;
     GlobalEtherDOG = &etherdog; // Set the global instance to the created EtherDOG object
     try
@@ -47,6 +49,7 @@ int main(int argc, char *argv[])
     if (fmu_thread.joinable())
     {
         fmu_thread.join();
+        std::cout << "FMU thread finished." << std::endl;
     }
     std::cout << "Simulation stopped gracefully." << std::endl;
     etherdog.stop();
