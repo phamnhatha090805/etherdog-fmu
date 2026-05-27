@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
         etherdog.StartNetworks(argc, argv);
         etherdog.loadFMU(etherdog.fmu_path);
         etherdog.SetupMappingFile();
+        std::cout << "Load configuration successfully. Simulation has not started yet." << std::endl;
     }
     catch (const std::exception &e)
     {
