@@ -144,7 +144,7 @@ void EtherDOG::FrameHandler()
     Frame frame;
     int32_t received = socket->read(frame.data(), ETH_MAX_SIZE);
 
-    auto t1 = since_epoch();
+    // auto t1 = since_epoch();
 
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read fmu_output while it's being updated by FmuThread
     while (true)
@@ -176,7 +176,7 @@ void EtherDOG::FrameHandler()
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update fmu_output again
     int32_t written = socket->write(frame.data(), received);
 
-    auto t2 = since_epoch();
+    /*auto t2 = since_epoch();
 
     stats.push_back(t2 - t1);
     if (stats.size() >= 1000)
@@ -188,12 +188,29 @@ void EtherDOG::FrameHandler()
                stats.back().count() / 1000.0,
                (std::reduce(stats.begin(), stats.end()) / stats.size()).count() / 1000.0);
         stats.clear();
-    }
+    }*/
 }
 
 void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_md, size_t slave_index, kickcat::CoE::Dictionary &dict, json &out_map, std::vector<EtherDOG::Mapping> &mappings)
 {
     // This function loads the mapping between FMU variables and EtherCAT PDOs from the provided JSON configuration and the CoE dictionary, and stores it in the provided mappings vector.
+
+    std::cerr << "\n===== DICTIONARY DUMP slave " << slave_index << " =====\n";
+    std::cerr << "dict size = " << dict.size() << "\n";
+    for (auto &object : dict)
+    {
+        std::cout << "Object 0x" << std::hex << object.index
+                  << std::dec << " name='" << object.name << "'\n";
+
+        for (auto &entry : object.entries)
+        {
+            std::cout << "  sub=" << (int)entry.subindex
+                      << " desc='" << entry.description << "'"
+                      << " bitlen=" << entry.bitlen
+                      << " bitoff=" << entry.bitoff
+                      << "\n";
+        }
+    }
 
     for (auto i = out_map.begin(); i != out_map.end(); ++i)
     {
@@ -232,11 +249,26 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
 
         bool mapping_found = false;
 
+        std::string ChannelName;
+        std::string EntryName = pdo_name;
+
+        auto slash = pdo_name.find('/');
+        if (slash != std::string::npos)
+        {
+            ChannelName = pdo_name.substr(0, slash);
+            EntryName = pdo_name.substr(slash + 1);
+        }
+
         for (auto &object : dict)
         {
+            if (!ChannelName.empty() && object.name != ChannelName)
+            {
+                continue;
+            }
+
             for (auto &entry : object.entries)
             {
-                if (entry.description == pdo_name)
+                if (entry.description == EntryName)
                 {
                     EtherDOG::Mapping m{
                         vr,
@@ -283,6 +315,7 @@ void EtherDOG::SetupMappingFile()
         }
 
         auto &dict = mailboxes[i]->getDictionary();
+        printf("EtherDOG dict address = %p\n", (void *)&dict);
 
         if (slave_config.contains("input-mappings"))
         {

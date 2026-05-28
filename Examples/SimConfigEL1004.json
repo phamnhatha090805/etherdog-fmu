@@ -7,7 +7,7 @@
             "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Beckhoff EK11xx.xml"
         },
         {
-            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Term 2 (EL1262-0010).bin",
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Term 2 (EL1004).bin",
             "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Beckhoff EL1xxx.xml",
             "input-mappings": {
                 "Out1": "Status Ch.1/CycleCount"
