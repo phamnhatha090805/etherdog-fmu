@@ -3,12 +3,12 @@
     "fmuPath": "/home/etherdog/etherdog-fmu/Examples/FmuModel/SimConfigDouble-1.fmu",
     "slaves": [
         {
-            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Term 1 (EK1100).bin",
-            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Beckhoff EK11xx.xml"
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Official Beckhoff/Term 1 (EK1100).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
         },
         {
-            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Term 2 (EL1262-0010).bin",
-            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Beckhoff EL1xxx.xml",
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL1262-0010).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml",
             "input-mappings": {
                 "Out1": "Status Ch.1/CycleCount"
             },
