@@ -195,10 +195,10 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
 {
     // This function loads the mapping between FMU variables and EtherCAT PDOs from the provided JSON configuration and the CoE dictionary, and stores it in the provided mappings vector.
 
-    std::cerr << "\n===== DICTIONARY DUMP slave " << slave_index << " =====\n";
-    std::cerr << "dict size = " << dict.size() << "\n";
     for (auto &object : dict)
     {
+        std::cerr << "\n===== DICTIONARY DUMP slave " << slave_index << " =====\n";
+        std::cerr << "dict size = " << dict.size() << "\n";
         std::cout << "Object 0x" << std::hex << object.index
                   << std::dec << " name='" << object.name << "'\n";
 
