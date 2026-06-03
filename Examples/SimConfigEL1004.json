@@ -8,7 +8,10 @@
         },
         {
             "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL1004).bin",
-            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml"
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml",
+            "input-mappings": {
+                "Out1": "Channel 1/Input"
+            }
         }
     ]
 }
