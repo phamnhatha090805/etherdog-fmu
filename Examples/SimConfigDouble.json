@@ -13,6 +13,18 @@
                 "In1": "AnalogOUT5",
                 "In2": "AnalogOUT1"
             }
+        },
+        {
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Box 1 (EtherDOG).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/EtherDOG.xml",
+            "input-mappings": {
+                "Out3": "AnalogIN5",
+                "Out4": "AnalogIN4"
+            },
+            "output-mappings": {
+                "In3": "AnalogOUT5",
+                "In4": "AnalogOUT1"
+            }
         }
     ]
 }
