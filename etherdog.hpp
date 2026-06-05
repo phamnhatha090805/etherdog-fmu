@@ -67,7 +67,7 @@ public:
         size_t SlaveIndex;
         std::string FMUname;
         FmuVariableType fmuVarType;
-        CoE::Entry &entry; // the CoE entry corresponding to this mapping, for debug/info purposes
+        CoE::Entry *entry; // the CoE entry corresponding to this mapping
     };
 
 private:

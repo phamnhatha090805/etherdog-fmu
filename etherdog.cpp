@@ -261,7 +261,7 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
                         slave_index,
                         fmu_var,
                         fmuVarType,
-                        entry,
+                        &entry,
                     };
 
                     mappings.push_back(m);
@@ -322,7 +322,7 @@ void EtherDOG::ExecutePdoInputMappings()
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : input_mappings)
     {
-        if (!m.entry.is_mapped)
+        if (!m.entry->is_mapped)
         {
             std::cerr << "[Slave index " << m.SlaveIndex << "] " << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped. Skipping mapping for this entry." << std::endl;
         }
@@ -387,7 +387,7 @@ void EtherDOG::ExecutePdoOutputMappings()
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : output_mappings)
     {
-        if (!m.entry.is_mapped)
+        if (!m.entry->is_mapped)
         {
             std::cerr << "[Slave index " << m.SlaveIndex << "] " << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped. Skipping mapping for this entry." << std::endl;
         }
