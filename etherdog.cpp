@@ -144,8 +144,6 @@ void EtherDOG::FrameHandler()
     Frame frame;
     int32_t received = socket->read(frame.data(), ETH_MAX_SIZE);
 
-    // auto t1 = since_epoch();
-
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read fmu_output while it's being updated by FmuThread
     while (true)
     {
@@ -175,20 +173,6 @@ void EtherDOG::FrameHandler()
 
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update fmu_output again
     int32_t written = socket->write(frame.data(), received);
-
-    /*auto t2 = since_epoch();
-
-    stats.push_back(t2 - t1);
-    if (stats.size() >= 1000)
-    {
-        std::sort(stats.begin(), stats.end());
-
-        printf("[%f] frame processing time: \n\t min: %f\n\t max: %f\n\t avg: %f\n", seconds_f(since_start()).count(),
-               stats.front().count() / 1000.0,
-               stats.back().count() / 1000.0,
-               (std::reduce(stats.begin(), stats.end()) / stats.size()).count() / 1000.0);
-        stats.clear();
-    }*/
 }
 
 void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_md, size_t slave_index, kickcat::CoE::Dictionary &dict, json &out_map, std::vector<EtherDOG::Mapping> &mappings)
