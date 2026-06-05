@@ -3,21 +3,24 @@
 #include "PdoFmuConverter.hpp"
 #include <thread>
 
-CoE::Device findDeviceByVendorAndProduct(std::vector<CoE::Device> &&devices, uint32_t vendor_id, uint32_t product_code, uint32_t revision_number)
+static kickcat::eeprom::SII ReadEepromSII(std::filesystem::path const &eeprom_path)
 {
-    // This function searches through the provided list of CoE::Device objects to find one that matches the given vendor_id, product_code, and revision_number.
-
-    for (CoE::Device &device : devices)
+    std::ifstream eeprom_file(eeprom_path, std::ios::binary | std::ios::ate);
+    if (!eeprom_file.is_open())
     {
-        if (device.vendor_id == vendor_id && device.product_code == product_code && device.revision_number == revision_number)
-        {
-            printf("Found matching device in ESI file for vendor_id 0x%08x, product_code 0x%08x, revision_number 0x%08x\n", vendor_id, product_code, revision_number);
-            return std::move(device);
-        }
+        throw std::runtime_error("Failed to open EEPROM file: " + eeprom_path.string());
     }
-    std::stringstream ss;
-    ss << "No matching device found for vendor_id 0x" << std::hex << vendor_id << " and product_code 0x" << product_code << " and revision_number 0x" << revision_number;
-    throw std::runtime_error(ss.str());
+
+    auto size = eeprom_file.tellg();
+    eeprom_file.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> eeprom_data(static_cast<size_t>(size));
+    eeprom_file.read(reinterpret_cast<char *>(eeprom_data.data()), size);
+
+    kickcat::eeprom::SII sii;
+    sii.parse(eeprom_data.data(), eeprom_data.size());
+
+    return sii;
 }
 
 int EtherDOG::StartNetworks(int argc, char *argv[])
@@ -65,7 +68,7 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
     output_pdo.reserve(slave_count);
 
     constexpr uint32_t PDO_MAX_SIZE = 32;
-    CoE::EsiParser parser;
+    kickcat::ESI::Parser parser;
 
     for (const auto &config : slaves_config)
     {
@@ -81,13 +84,33 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
             std::string coe_xml_path = config["coe_xml"];
             fs::path coe_xml_full_path = coe_xml_path;
             auto mbx = std::make_unique<mailbox::response::Mailbox>(esc.get(), 1024);
-            auto devices = parser.loadDevicesFromFile(coe_xml_full_path.string());
+            auto sii = ReadEepromSII(eeprom_full_path);
 
-            // search for productcode / vendor id:
-            uint32_t vendor_id = esc->getVendorId();             // from EEPROM
-            uint32_t product_code = esc->getProductCode();       // from EEPROM
-            uint32_t revision_number = esc->getRevisionNumber(); // from EEPROM
-            CoE::Device device = findDeviceByVendorAndProduct(std::move(devices), vendor_id, product_code, revision_number);
+            uint32_t product_code = sii.info.product_code;       // From EEPROM
+            uint32_t revision_number = sii.info.revision_number; // From EEPROM
+            uint32_t vendor_id = sii.info.vendor_id;             // From EEPROM
+
+            std::cout << "EEPROM info for slave " << slaves.size() << ": vendor_id=0x" << std::hex << vendor_id
+                      << ", product_code=0x" << product_code
+                      << ", revision_number=0x" << revision_number
+                      << std::dec << std::endl;
+
+            ESI::DeviceFilter filter;
+            filter.product_code = product_code;
+            filter.revision_no = revision_number;
+
+            ESI::Device device = parser.loadDevice(coe_xml_full_path.string(), filter);
+
+            std::cout << "Found matching device in ESI XML: vendor_id=0x" << std::hex << device.vendor_id
+                      << ", product_code=0x" << device.product_code
+                      << ", revision_number=0x" << device.revision_no
+                      << std::dec << std::endl;
+
+            if (device.vendor_id != sii.info.vendor_id)
+            {
+                throw std::runtime_error("ESI vendor ID does not match EEPROM vendor ID");
+            }
+
             mbx->enableCoE(std::move(device.dictionary));
             slave->setMailbox(mbx.get());
             mailboxes.push_back(std::move(mbx));
@@ -254,9 +277,20 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
             {
                 if (entry.description == EntryName)
                 {
+                    std::cout
+                        << "[DEBUG] JSON PDO name '" << pdo_name
+                        << "' resolved to object 0x"
+                        << std::hex << object.index
+                        << ":" << std::dec << int(entry.subindex)
+                        << " object_name='" << object.name << "'"
+                        << " entry_desc='" << entry.description << "'"
+                        << " bitlen=" << entry.bitlen
+                        << " is_mapped=" << entry.is_mapped
+                        << std::endl;
+
                     EtherDOG::Mapping m{
                         vr,
-                        (size_t)(entry.bitlen / 8),
+                        (size_t)((entry.bitlen + 7) / 8),
                         pdo_name,
                         slave_index,
                         fmu_var,

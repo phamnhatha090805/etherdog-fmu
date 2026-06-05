@@ -23,6 +23,9 @@
 #include "kickcat/helpers.h"
 #include "kickcat/slave/Slave.h"
 #include <kickcat/AbstractSocket.h>
+#include <kickcat/ESI/Device.h>
+#include <kickcat/ESI/Parser.h>
+#include <kickcat/SIIParser.h>
 
 using namespace fmi4cpp;
 using namespace kickcat;
