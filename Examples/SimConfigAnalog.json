@@ -1,0 +1,17 @@
+{
+    "interface": "eth0",
+    "fmuPath": "/home/etherdog/etherdog-fmu/Examples/FmuModel/SimConfigDouble-1.fmu",
+    "slaves": [
+        {
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Official Beckhoff/Term 1 (EK1100).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
+        },
+        {
+            "eeprom": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL4004).bin",
+            "coe_xml": "/home/etherdog/etherdog-fmu/Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL4xxx.xml",
+            "output-mappings": {
+                "In1": "AO outputs Ch.1/Analog output"
+            }
+        }
+    ]
+}
