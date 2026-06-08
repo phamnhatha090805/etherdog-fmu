@@ -26,6 +26,8 @@
 #include <kickcat/ESI/Device.h>
 #include <kickcat/ESI/Parser.h>
 #include <kickcat/SIIParser.h>
+#include <kickcat/ESI/SIIBuilder.h>
+#include "kickcat/CoE/OD.h"
 
 using namespace fmi4cpp;
 using namespace kickcat;
@@ -71,6 +73,7 @@ public:
         std::string FMUname;
         FmuVariableType fmuVarType;
         CoE::Entry *entry; // the CoE entry corresponding to this mapping
+        bool MessagePrinted;
     };
 
 private:

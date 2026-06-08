@@ -2,6 +2,7 @@
 #include "etherdog.hpp"
 #include "PdoFmuConverter.hpp"
 #include <thread>
+#include <spdlog/spdlog.h>
 
 static kickcat::eeprom::SII ReadEepromSII(std::filesystem::path const &eeprom_path)
 {
@@ -60,6 +61,9 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
     auto &slaves_config = main_config["slaves"];
     size_t slave_count = slaves_config.size();
 
+    fs::path main_config_path = fs::path(config_file);
+    fs::path config_dir = main_config_path.parent_path();
+
     escs.reserve(slave_count);
     pdos.reserve(slave_count);
     slaves.reserve(slave_count);
@@ -73,27 +77,25 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
     for (const auto &config : slaves_config)
     {
 
-        std::string eeprom_path = config["eeprom"];
-        fs::path eeprom_full_path = eeprom_path;
+        fs::path eeprom_full_path = config_dir / config["eeprom"].get<std::string>();
+
         auto esc = std::make_unique<EmulatedESC>(eeprom_full_path.string().c_str());
         auto pdo = std::make_unique<PDO>(esc.get());
         auto slave = std::make_unique<Slave>(esc.get(), pdo.get());
 
         if (config.contains("coe_xml"))
         {
-            std::string coe_xml_path = config["coe_xml"];
-            fs::path coe_xml_full_path = coe_xml_path;
+            fs::path coe_xml_full_path = config_dir / config["coe_xml"].get<std::string>();
+
             auto mbx = std::make_unique<mailbox::response::Mailbox>(esc.get(), 1024);
+
             auto sii = ReadEepromSII(eeprom_full_path);
 
-            uint32_t product_code = sii.info.product_code;       // From EEPROM
-            uint32_t revision_number = sii.info.revision_number; // From EEPROM
-            uint32_t vendor_id = sii.info.vendor_id;             // From EEPROM
+            uint32_t vendor_id = sii.info.vendor_id;
+            uint32_t product_code = sii.info.product_code;
+            uint32_t revision_number = sii.info.revision_number;
 
-            std::cout << "EEPROM info for slave " << slaves.size() << ": vendor_id=0x" << std::hex << vendor_id
-                      << ", product_code=0x" << product_code
-                      << ", revision_number=0x" << revision_number
-                      << std::dec << std::endl;
+            spdlog::info("EEPROM info for slave {}): vendor_id=0x{:X}, product_code=0x{:X}, revision_number=0x{:X}", slaves.size(), vendor_id, product_code, revision_number);
 
             ESI::DeviceFilter filter;
             filter.product_code = product_code;
@@ -101,15 +103,25 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
 
             ESI::Device device = parser.loadDevice(coe_xml_full_path.string(), filter);
 
-            std::cout << "Found matching device in ESI XML: vendor_id=0x" << std::hex << device.vendor_id
-                      << ", product_code=0x" << device.product_code
-                      << ", revision_number=0x" << device.revision_no
-                      << std::dec << std::endl;
+            spdlog::info("Found matching device in ESI XML");
+            spdlog::info(": vendor_id=0x{:X}, product_code=0x{:X}, revision_no=0x{:X}", device.vendor_id, device.product_code, device.revision_no);
 
-            if (device.vendor_id != sii.info.vendor_id)
+            if (device.vendor_id != vendor_id)
             {
                 throw std::runtime_error("ESI vendor ID does not match EEPROM vendor ID");
             }
+
+            if (device.product_code != product_code)
+            {
+                throw std::runtime_error("ESI product code does not match EEPROM product code");
+            }
+
+            if (device.revision_no != revision_number)
+            {
+                throw std::runtime_error("ESI revision number does not match EEPROM revision number");
+            }
+
+            CoE::materializeStorage(device.dictionary);
 
             mbx->enableCoE(std::move(device.dictionary));
             slave->setMailbox(mbx.get());
@@ -296,7 +308,7 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
                         fmu_var,
                         fmuVarType,
                         &entry,
-                    };
+                        false};
 
                     mappings.push_back(m);
                     mapping_found = true;
@@ -358,7 +370,11 @@ void EtherDOG::ExecutePdoInputMappings()
     {
         if (!m.entry->is_mapped)
         {
-            std::cerr << "[Slave index " << m.SlaveIndex << "] " << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped. Skipping mapping for this entry." << std::endl;
+            if (!m.MessagePrinted) // Print the warning message only once for each unmapped entry to avoid spamming the console
+            {
+                spdlog::warn("[Slave index {}] Warning: CoE entry for PDO '{}' is not mapped. Skipping mapping for this entry.", m.SlaveIndex, m.PDOname);
+                m.MessagePrinted = true; // Set the flag to true after printing the warning message
+            }
         }
         else
         {
@@ -369,11 +385,11 @@ void EtherDOG::ExecutePdoInputMappings()
                 double fmu_output;
                 if (!fmu_slave->read_real(m.vr, fmu_output))
                 {
-                    std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
                 WriteFmuDoubleToPdo(m, fmu_output);
-                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
+                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
@@ -382,11 +398,11 @@ void EtherDOG::ExecutePdoInputMappings()
                 int32_t fmu_output;
                 if (!fmu_slave->read_integer(m.vr, fmu_output))
                 {
-                    std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
                 WriteFmuIntToPdo(m, fmu_output);
-                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
+                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
@@ -395,17 +411,17 @@ void EtherDOG::ExecutePdoInputMappings()
                 fmi2Boolean fmu_output;
                 if (!fmu_slave->read_boolean(m.vr, fmu_output))
                 {
-                    std::cerr << "Error reading FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
                 WriteFmuBoolToPdo(m, fmu_output);
-                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping FMU variable '" << m.FMUname << "' to PDO variable '" << m.PDOname << "' value= " << fmu_output << std::endl;
+                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
             default:
             {
-                std::cerr << "Unsupported FMU variable type for variable '" << m.FMUname << "'. Skipping writing to PDO for this variable." << std::endl;
+                spdlog::error("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping writing to PDO for this variable.", m.SlaveIndex, m.FMUname);
                 continue; // Skip unsupported variable types
             }
             }
@@ -423,7 +439,11 @@ void EtherDOG::ExecutePdoOutputMappings()
     {
         if (!m.entry->is_mapped)
         {
-            std::cerr << "[Slave index " << m.SlaveIndex << "] " << "Warning: CoE entry for PDO '" << m.PDOname << "' is not mapped. Skipping mapping for this entry." << std::endl;
+            if (!m.MessagePrinted)
+            {
+                spdlog::warn("[Slave index {}] Warning: CoE entry for PDO '{}' is not mapped. Skipping mapping for this entry.", m.SlaveIndex, m.PDOname);
+                m.MessagePrinted = true; // Set the flag to true after printing the warning message
+            }
         }
         else
         {
@@ -434,10 +454,10 @@ void EtherDOG::ExecutePdoOutputMappings()
                 double fmu_input = ReadPdoToFmuDouble(m);
                 if (!fmu_slave->write_real(m.vr, fmu_input))
                 {
-                    std::cerr << "Error writing FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "' value= " << fmu_input << std::endl;
+                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
             }
 
@@ -446,10 +466,10 @@ void EtherDOG::ExecutePdoOutputMappings()
                 int32_t fmu_input = ReadPdoToFmuInt(m);
                 if (!fmu_slave->write_integer(m.vr, fmu_input))
                 {
-                    std::cerr << "Error writing FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "' value= " << fmu_input << std::endl;
+                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
             }
 
@@ -458,11 +478,16 @@ void EtherDOG::ExecutePdoOutputMappings()
                 fmi2Boolean fmu_input = ReadPdoToFmuBool(m);
                 if (!fmu_slave->write_boolean(m.vr, fmu_input))
                 {
-                    std::cerr << "Error writing FMU variable with VR " << m.vr << ": " << to_string(fmu_slave->last_status()) << std::endl;
+                    spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                std::cout << "[Slave index " << m.SlaveIndex << "] " << "Mapping PDO variable '" << m.PDOname << "' to FMU variable '" << m.FMUname << "' value= " << fmu_input << std::endl;
+                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
+            }
+            default:
+            {
+                spdlog::error("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping reading from PDO for this variable.", m.SlaveIndex, m.FMUname);
+                continue; // Skip unsupported variable types
             }
             }
         }

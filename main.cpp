@@ -7,6 +7,7 @@
 
 #include <thread>
 #include <csignal>
+#include <spdlog/spdlog.h>
 
 using namespace fmi4cpp;
 using namespace kickcat;
@@ -27,8 +28,11 @@ void signalHandler(int signal)
 
 int main(int argc, char *argv[])
 {
+    spdlog::set_level(spdlog::level::debug);
+
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
+    spdlog::info("EtherDOG FMU simulation starting...");
     EtherDOG etherdog;
     GlobalEtherDOG = &etherdog; // Set the global instance to the created EtherDOG object
     try
@@ -36,11 +40,11 @@ int main(int argc, char *argv[])
         etherdog.StartNetworks(argc, argv);
         etherdog.loadFMU(etherdog.fmu_path);
         etherdog.SetupMappingFile();
-        std::cout << "Load configuration successfully. Simulation has not started yet." << std::endl;
+        spdlog::info("Load configuration successfully. Simulation has not started yet.");
     }
     catch (const std::exception &e)
     {
-        std::cerr << "Error during initialization: " << e.what() << std::endl;
+        spdlog::error("Error during initialization: {}", e.what());
         return 1;
     }
 
@@ -50,10 +54,10 @@ int main(int argc, char *argv[])
     if (fmu_thread.joinable())
     {
         fmu_thread.join();
-        std::cout << "FMU thread finished." << std::endl;
+        spdlog::info("FMU thread finished.");
     }
-    std::cout << "Simulation stopped gracefully." << std::endl;
+    spdlog::info("Simulation stopped gracefully.");
     etherdog.stop();
-    std::cout << "Simulation terminated." << std::endl;
+    spdlog::info("EtherDOG FMU simulation terminated successfully.");
     return 0;
 }

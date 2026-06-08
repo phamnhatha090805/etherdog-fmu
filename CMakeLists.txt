@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package(fmi4cpp REQUIRED)
 find_package(KickCAT CONFIG REQUIRED)
+find_package(spdlog REQUIRED)
 
 add_executable(etherdog-fmu 
     main.cpp
@@ -18,4 +19,4 @@ target_compile_options(etherdog-fmu PRIVATE
     -Wno-unused-parameter -Wno-unused-variable
 )
 
-target_link_libraries(etherdog-fmu fmi4cpp::fmi4cpp KickCAT::kickcat)
+target_link_libraries(etherdog-fmu fmi4cpp::fmi4cpp KickCAT::kickcat spdlog::spdlog)
