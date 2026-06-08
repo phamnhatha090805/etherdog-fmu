@@ -7,13 +7,10 @@
             "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
         },
         {
-            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL1262-0010).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml",
-            "input-mappings": {
-                "Out1": "Status Ch.1/CycleCount"
-            },
+            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL3162).bin",
+            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL31xx.xml",
             "output-mappings": {
-                "In1": "Control Ch.1/CycleCount"
+                "In1": "AI Inputs Ch.1/Value"
             }
         }
     ]
