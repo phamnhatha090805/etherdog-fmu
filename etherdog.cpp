@@ -68,10 +68,12 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
     pdos.reserve(slave_count);
     slaves.reserve(slave_count);
     mailboxes.reserve(slave_count);
+    dictionaries.reserve(slave_count);
+    slave_dictionaries.reserve(slave_count);
     input_pdo.reserve(slave_count);
     output_pdo.reserve(slave_count);
 
-    constexpr uint32_t PDO_MAX_SIZE = 32;
+    constexpr uint32_t PDO_MAX_SIZE = 4096;
     kickcat::ESI::Parser parser;
 
     for (const auto &config : slaves_config)
@@ -123,9 +125,21 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
 
             CoE::materializeStorage(device.dictionary);
 
-            mbx->enableCoE(std::move(device.dictionary));
+            dictionaries.push_back(std::make_unique<CoE::Dictionary>(std::move(device.dictionary)));
+
+            CoE::Dictionary *dictionary = dictionaries.back().get();
+
+            slave->setDictionary(dictionary);
+
+            mbx->enableCoE(*dictionary);
             slave->setMailbox(mbx.get());
+
             mailboxes.push_back(std::move(mbx));
+            slave_dictionaries.push_back(dictionary);
+        }
+        else
+        {
+            slave_dictionaries.push_back(nullptr);
         }
 
         input_pdo.emplace_back(PDO_MAX_SIZE);
@@ -140,23 +154,15 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
         slaves.push_back(std::move(slave));
     }
 
-    // Configure DL status for each ESC based on its position in the chain.
-    // Port 0 is always connected (upstream to master or previous slave).
-    // Port 1 is connected if there is a downstream slave.
-    for (size_t i = 0; i < escs.size(); ++i)
+    std::vector<EmulatedESC *> esc_ptrs;
+    esc_ptrs.reserve(escs.size());
+
+    for (auto &esc : escs)
     {
-        uint16_t dl_status = 0;
-        dl_status |= (1 << 4); // PL_port0
-        dl_status |= (1 << 9); // COM_port0
-
-        if (i + 1 < escs.size())
-        {
-            dl_status |= (1 << 5);  // PL_port1
-            dl_status |= (1 << 11); // COM_port1
-        }
-
-        escs[i]->write(reg::ESC_DL_STATUS, &dl_status, sizeof(dl_status));
+        esc_ptrs.push_back(esc.get());
     }
+
+    network = std::make_unique<EmulatedNetwork>(std::move(esc_ptrs));
 
     auto [socket2, _] = createSockets(interface, "");
     socket = std::move(socket2);
@@ -179,35 +185,34 @@ void EtherDOG::FrameHandler()
     Frame frame;
     int32_t received = socket->read(frame.data(), ETH_MAX_SIZE);
 
-    fmu_mutex.lock(); // Lock MUTEX here if needed to safely read fmu_output while it's being updated by FmuThread
-    while (true)
+    if (received <= 0)
     {
-        auto [header, data, wkc] = frame.peekDatagram();
-        if (header == nullptr)
-        {
-            break;
-        }
-
-        for (auto &esc : escs)
-        {
-            esc->processDatagram(header, data, wkc);
-        }
+        return;
     }
 
-    for (size_t i = 0; i < slaves.size(); ++i)
+    if (!network->route(frame, false))
     {
-        slaves[i]->routine();
-        if (slaves[i]->state() == State::SAFE_OP)
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(fmu_mutex);
+
+        for (size_t i = 0; i < slaves.size(); ++i)
         {
-            if (output_pdo[i][1] != 0xFF)
+            slaves[i]->routine();
+
+            if (slaves[i]->state() == State::SAFE_OP)
             {
-                slaves[i]->validateOutputData();
+                if (output_pdo[i][1] != 0xFF)
+                {
+                    slaves[i]->validateOutputData();
+                }
             }
         }
     }
 
-    fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update fmu_output again
-    int32_t written = socket->write(frame.data(), received);
+    socket->write(frame.data(), received);
 }
 
 void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_md, size_t slave_index, kickcat::CoE::Dictionary &dict, json &out_map, std::vector<EtherDOG::Mapping> &mappings)
@@ -338,13 +343,13 @@ void EtherDOG::SetupMappingFile()
     {
         const auto &slave_config = slaves_config[i];
 
-        if (i >= mailboxes.size())
+        if (i >= slave_dictionaries.size() || slave_dictionaries[i] == nullptr)
         {
-            std::cerr << "No mailbox found for slave " << i << std::endl;
+            std::cerr << "No dictionary found for slave " << i << std::endl;
             continue;
         }
 
-        auto &dict = mailboxes[i]->getDictionary();
+        auto &dict = *slave_dictionaries[i];
         printf("EtherDOG dict address = %p\n", (void *)&dict);
 
         if (slave_config.contains("input-mappings"))
@@ -389,7 +394,7 @@ void EtherDOG::ExecutePdoInputMappings()
                     continue;
                 }
                 WriteFmuDoubleToPdo(m, fmu_output);
-                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
@@ -402,7 +407,7 @@ void EtherDOG::ExecutePdoInputMappings()
                     continue;
                 }
                 WriteFmuIntToPdo(m, fmu_output);
-                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
@@ -415,13 +420,13 @@ void EtherDOG::ExecutePdoInputMappings()
                     continue;
                 }
                 WriteFmuBoolToPdo(m, fmu_output);
-                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
             default:
             {
-                spdlog::error("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping writing to PDO for this variable.", m.SlaveIndex, m.FMUname);
+                spdlog::warn("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping writing to PDO for this variable.", m.SlaveIndex, m.FMUname);
                 continue; // Skip unsupported variable types
             }
             }
@@ -457,7 +462,7 @@ void EtherDOG::ExecutePdoOutputMappings()
                     spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
             }
 
@@ -469,7 +474,7 @@ void EtherDOG::ExecutePdoOutputMappings()
                     spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
             }
 
@@ -481,12 +486,12 @@ void EtherDOG::ExecutePdoOutputMappings()
                     spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
             }
             default:
             {
-                spdlog::error("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping reading from PDO for this variable.", m.SlaveIndex, m.FMUname);
+                spdlog::warn("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping reading from PDO for this variable.", m.SlaveIndex, m.FMUname);
                 continue; // Skip unsupported variable types
             }
             }
@@ -547,7 +552,7 @@ void EtherDOG::step()
         return;
     }
     t = fmu_slave->get_simulation_time();
-    std::cout << "t=" << t << std::endl;
+    spdlog::info("t={} FMU Simulation is running", t);
 
     ExecutePdoInputMappings(); // Call ExecutePdoInputMappings to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
 }

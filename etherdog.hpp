@@ -28,6 +28,7 @@
 #include <kickcat/SIIParser.h>
 #include <kickcat/ESI/SIIBuilder.h>
 #include "kickcat/CoE/OD.h"
+#include "kickcat/EmulatedNetwork.h"
 
 using namespace fmi4cpp;
 using namespace kickcat;
@@ -92,6 +93,9 @@ private:
     std::vector<std::unique_ptr<mailbox::response::Mailbox>> mailboxes;
     std::vector<std::vector<uint8_t>> input_pdo;
     std::vector<std::vector<uint8_t>> output_pdo;
+    std::vector<std::unique_ptr<kickcat::CoE::Dictionary>> dictionaries;
+    std::vector<kickcat::CoE::Dictionary *> slave_dictionaries;
+    std::unique_ptr<kickcat::EmulatedNetwork> network;
 
     std::string config_file;
     std::string interface;
