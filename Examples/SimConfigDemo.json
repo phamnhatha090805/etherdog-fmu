@@ -1,0 +1,36 @@
+{
+    "interface": "eth0",
+    "fmuPath": "../Examples/FmuModel/DemoModel-1.fmu",
+    "slaves": [
+        {
+            "eeprom": "../Examples/EsiFiles/BIN/Box 1 (EtherDOG).bin",
+            "coe_xml": "../Examples/EsiFiles/XML/EtherDOG.xml",
+            "input-mappings": {
+                "RoomTemperature": "AnalogIN0",
+                "OutdoorSensor": "AnalogIN1"
+            }
+        },
+        {
+            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 1 (EK1100).bin",
+            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
+        },
+        {
+            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL4004).bin",
+            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL4xxx.xml",
+            "output-mappings": {
+                "Power": "AO outputs Ch.1/Analog output"
+            }
+        },
+        {
+            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL3004).bin",
+            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL30xx.xml",
+            "output-mappings": {
+                "Power": "AO outputs Ch.1/Analog output"
+            }
+        },
+        {
+            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL1004).bin",
+            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml"
+        }
+    ]
+}
