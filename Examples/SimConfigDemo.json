@@ -22,8 +22,11 @@
             }
         },
         {
-            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL1004).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml"
+            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL2068).bin",
+            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL2xxx.xml",
+            "input-mappings": {
+                "Out1": "DOS Outputs Ch.01/Output"
+            }
         }
     ]
 }
