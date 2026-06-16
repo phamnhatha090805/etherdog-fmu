@@ -389,7 +389,7 @@ void EtherDOG::ExecutePdoInputMappings()
                     continue;
                 }
                 WriteFmuDoubleToPdo(m, fmu_output);
-                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
@@ -402,7 +402,7 @@ void EtherDOG::ExecutePdoInputMappings()
                     continue;
                 }
                 WriteFmuIntToPdo(m, fmu_output);
-                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
@@ -415,13 +415,13 @@ void EtherDOG::ExecutePdoInputMappings()
                     continue;
                 }
                 WriteFmuBoolToPdo(m, fmu_output);
-                spdlog::debug("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
                 break;
             }
 
             default:
             {
-                spdlog::error("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping writing to PDO for this variable.", m.SlaveIndex, m.FMUname);
+                spdlog::warn("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping writing to PDO for this variable.", m.SlaveIndex, m.FMUname);
                 continue; // Skip unsupported variable types
             }
             }
@@ -457,7 +457,7 @@ void EtherDOG::ExecutePdoOutputMappings()
                     spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
             }
 
@@ -469,7 +469,7 @@ void EtherDOG::ExecutePdoOutputMappings()
                     spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
             }
 
@@ -481,12 +481,12 @@ void EtherDOG::ExecutePdoOutputMappings()
                     spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
                     continue;
                 }
-                spdlog::debug("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
                 break;
             }
             default:
             {
-                spdlog::error("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping reading from PDO for this variable.", m.SlaveIndex, m.FMUname);
+                spdlog::warn("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping reading from PDO for this variable.", m.SlaveIndex, m.FMUname);
                 continue; // Skip unsupported variable types
             }
             }
@@ -543,11 +543,11 @@ void EtherDOG::step()
 
     if (!fmu_slave->step(stepSize))
     {
-        std::cerr << "Error! step() returned with status: " << to_string(fmu_slave->last_status()) << std::endl;
+        spdlog::error("Error! step() returned with status: {}", to_string(fmu_slave->last_status()));
         return;
     }
     t = fmu_slave->get_simulation_time();
-    std::cout << "t=" << t << std::endl;
+    spdlog::info("t = {} FMU simulation is running", t);
 
     ExecutePdoInputMappings(); // Call ExecutePdoInputMappings to update the PDO memory with the latest values from the FMU variables based on the mappings set up in SetupMapping.
 }
