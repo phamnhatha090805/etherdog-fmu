@@ -22,13 +22,6 @@
             }
         },
         {
-            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL3004).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL30xx.xml",
-            "output-mappings": {
-                "Power": "AO outputs Ch.1/Analog output"
-            }
-        },
-        {
             "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL1004).bin",
             "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml"
         }
