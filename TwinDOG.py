@@ -35,6 +35,10 @@ class SimulatorGUI(QWidget):
         super().__init__()
 
         self.process = None  # -- To keep track of the running simulation process
+        self.load_process = (
+            None  # -- Separate process for loading/printing the configuration only
+        )
+        self.configuration_loaded = False
         self.output_signal.connect(
             self.append_output
         )  # -- Connect the output signal to the append_output method
@@ -58,6 +62,10 @@ class SimulatorGUI(QWidget):
         self.config_input = QLineEdit()
         self.config_browse_btn = QPushButton("Browse")
         self.config_browse_btn.clicked.connect(self.browse_config)
+
+        # -- Load Configuration Button ---
+        self.load_config_btn = QPushButton("Load Configuration")
+        self.load_config_btn.clicked.connect(self.load_configuration)
 
         # -- Run Button ---
         self.run_btn = QPushButton("Run Simulation")
@@ -107,6 +115,9 @@ class SimulatorGUI(QWidget):
             config_layout
         )  # -- Add the config input and browse button layout to the main layout
 
+        layout.addWidget(
+            self.load_config_btn
+        )  # -- Add the load configuration button to the main layout
         layout.addWidget(self.run_btn)  # -- Add the run button to the main layout
         layout.addWidget(self.stop_btn)  # -- Add the stop button to the main layout
         layout.addWidget(self.output)  # -- Add the output display to the main layout
@@ -183,30 +194,63 @@ class SimulatorGUI(QWidget):
         except Exception as e:
             return False, str(e)
 
-    def run_simulation(
-        self,
-    ):  # -- Validate inputs, update the config JSON with the selected network interface, and run the TwinDOG simulation in a separate thread
+    def get_validated_command_base(self):
         executable = self.executable_input.text().strip()
         config = self.config_input.text().strip()
 
         if not os.path.exists(executable):
             self.append_output("Executable not found")
-            return
+            return None
 
         if not os.path.exists(config):
             self.append_output("Config JSON file not found")
-            return
+            return None
 
         valid, error = self.validate_config_json(config)
         if not valid:
             self.append_output(f"Invalid Config JSON: {error}")
+            return None
+
+        return [executable, "-f", config]
+
+    def load_configuration(self):
+        # -- Load and print all configuration information, but do not start the simulation.
+        if self.process is not None and self.process.poll() is None:
+            self.append_output(
+                "Simulation is already running. Stop it before loading configuration again."
+            )
             return
 
-        cmd = [executable, "-f", config]
+        if self.load_process is not None and self.load_process.poll() is None:
+            self.append_output("Configuration is already being loaded.")
+            return
+
+        cmd = self.get_validated_command_base()
+        if cmd is None:
+            return
+
+        cmd.append("--load-config-only")
+        self.configuration_loaded = False
+        self.append_output(f"Loading configuration: {' '.join(cmd)}")
+
+        thread = threading.Thread(target=self.execute_command, args=(cmd, "load"))
+        thread.daemon = True
+        thread.start()
+
+    def run_simulation(
+        self,
+    ):  # -- Validate inputs, update the config JSON with the selected network interface, and run the TwinDOG simulation in a separate thread
+        if self.process is not None and self.process.poll() is None:
+            self.append_output("Simulation is already running.")
+            return
+
+        cmd = self.get_validated_command_base()
+        if cmd is None:
+            return
 
         self.append_output(f"Running: {' '.join(cmd)}")
 
-        thread = threading.Thread(target=self.execute_command, args=(cmd,))
+        thread = threading.Thread(target=self.execute_command, args=(cmd, "simulation"))
         thread.daemon = True
         thread.start()
 
@@ -223,12 +267,12 @@ class SimulatorGUI(QWidget):
             self.append_output("No simulation is currently running.")
 
     def execute_command(
-        self, cmd
+        self, cmd, mode="simulation"
     ):  # -- Run the given command in a subprocess and capture its output to display in the GUI
         try:
             executable_dir = os.path.dirname(cmd[0])
 
-            self.process = subprocess.Popen(
+            process = subprocess.Popen(
                 cmd,
                 cwd=executable_dir,
                 stdout=subprocess.PIPE,
@@ -238,15 +282,33 @@ class SimulatorGUI(QWidget):
                 start_new_session=True,
             )
 
-            for line in self.process.stdout:
+            if mode == "load":
+                self.load_process = process
+            else:
+                self.process = process
+
+            for line in process.stdout:
                 self.output_signal.emit(line.rstrip())
 
-            self.process.wait()
-            self.process = None
-            self.output_signal.emit("Simulation finished")
+            return_code = process.wait()
+
+            if mode == "load":
+                self.load_process = None
+                if return_code == 0:
+                    self.configuration_loaded = True
+                    self.output_signal.emit(
+                        "Configuration loaded. Simulation has not started yet."
+                    )
+                else:
+                    self.output_signal.emit(
+                        f"Configuration load failed with exit code {return_code}"
+                    )
+            else:
+                self.process = None
+                self.output_signal.emit("Simulation finished")
 
         except Exception as e:
-            self.output_signal.emit(f"Error while running simulation: {e}")
+            self.output_signal.emit(f"Error while running command: {e}")
 
 
 if (
