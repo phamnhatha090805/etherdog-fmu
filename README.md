@@ -359,7 +359,7 @@ When the GUI opens, it shows several fields.
 | `Stop Simulation`    | Stops the running simulation                                  |
 | Output window        | Shows the EtherDOG runtime log output                         |
 
-![GUI Overview](Images/GUI Overview.png)
+![GUI Overview](Images/gui-overview.png)
 ---
 
 ## 9. JSON configuration format
