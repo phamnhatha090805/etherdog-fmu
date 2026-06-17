@@ -1,6 +1,6 @@
 {
     "interface": "eth0",
-    "fmuPath": "../Examples/FmuModel/DemoModel-1.fmu",
+    "fmuPath": "../Examples/FmuModel/DemoModel2-1.fmu",
     "slaves": [
         {
             "eeprom": "../Examples/EsiFiles/BIN/Box 1 (EtherDOG).bin",
@@ -21,13 +21,15 @@
             "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL4004).bin",
             "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL4xxx.xml",
             "output-mappings": {
-                "Power": "AO outputs Ch.1/Analog output",
-                "ThermalEff": "AO outputs Ch.2/Analog output"
+                "Power": "AO outputs Ch.1/Analog output"
             }
         },
         {
             "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL2068).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL2xxx.xml"
+            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL2xxx.xml",
+            "output-mappings": {
+                "Door": "DOS Outputs Ch.01/Output"
+            }
         }
     ]
 }
