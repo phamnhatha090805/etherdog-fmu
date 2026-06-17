@@ -810,8 +810,11 @@ sudo ./etherdog-fmu -f ../Examples/SimConfigDemo.json
 
 EtherDOG-FMU builds on top of several open-source projects:
 
-* [KickCAT](https://github.com/leducp/KickCAT) for the EtherCAT stack and slave emulation
-* [FMI4cpp](https://github.com/NTNU-IHB/FMI4cpp) for FMU loading and simulation
-* [spdlog](https://github.com/gabime/spdlog) for logging
+* [KickCAT](https://github.com/leducp/KickCAT) for the EtherCAT stack, slave emulation, CoE support, ESI parsing, and EtherCAT frame handling.
+* [FMI4cpp](https://github.com/NTNU-IHB/FMI4cpp) for loading and running FMU simulation models.
+* [spdlog](https://github.com/gabime/spdlog) for logging.
+
+Special thanks to the developers and maintainers of KickCAT and FMI4cpp.  
+Their work made it possible for EtherDOG-FMU to focus on dynamic virtual EtherCAT device generation, PDO/FMU mapping, and simulation workflow development instead of re-implementing the complete EtherCAT and FMI foundations from scratch.
 
 Please check the licenses of these projects before using EtherDOG-FMU in a commercial or redistributed system.
