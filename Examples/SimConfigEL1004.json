@@ -3,6 +3,13 @@
     "fmuPath": "../Examples/FmuModel/SimConfigBool-1.fmu",
     "slaves": [
         {
+            "eeprom": "../Examples/EsiFiles/BIN/Box 1 (EtherDOG).bin",
+            "coe_xml": "../Examples/EsiFiles/XML/EtherDOG.xml",
+            "output-mappings": {
+                "In1": "AnalogOUT2"
+            }
+        },
+        {
             "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 1 (EK1100).bin",
             "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
         },

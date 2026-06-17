@@ -1,8 +1,199 @@
-
 #include "etherdog.hpp"
 #include "PdoFmuConverter.hpp"
 #include <thread>
 #include <spdlog/spdlog.h>
+
+//
+// `entry` now points at the DATA object (0x3101 / 0x6000 ...), so entry->is_mapped
+// flips true at SAFE_OP. The old byte-size field is no longer used for I/O.
+
+namespace
+{
+    enum class PdoDirection
+    {
+        Input,  // TxPDO: slave -> master, assigned PDOs 0x1A00-0x1BFF, lives in the input PI
+        Output, // RxPDO: master -> slave, assigned PDOs 0x1600-0x17FF, lives in the output PI
+    };
+
+    // One resolved process-data field. data_entry is the object the slave actually maps
+    // (its is_mapped flips true at SAFE_OP); pi_bit_offset/bit_len locate the field in
+    // the SM image (the buffer passed to PDO::setInput / PDO::setOutput).
+    struct PdoBinding
+    {
+        kickcat::CoE::Entry *data_entry = nullptr;
+        std::string channel_name; // mapping object name, e.g. "Channel 1"
+        std::string entry_name;   // mapping entry description, e.g. "Input"
+        uint16_t data_index = 0;  // e.g. 0x3101
+        uint8_t data_sub = 0;     // e.g. 1
+        uint32_t pi_bit_offset = 0;
+        uint16_t bit_len = 0;
+        PdoDirection direction = PdoDirection::Input;
+    };
+
+    bool isTxPdoIndex(uint16_t pdo_index)
+    {
+        return (pdo_index >= 0x1A00 and pdo_index <= 0x1BFF);
+    }
+
+    // Replays PDO::configureMapping / parsePdoMap over the dictionary: walk every SM
+    // assignment object (0x1C10 + SM index), then each assigned PDO map, accumulating
+    // the bit offset exactly like the slave does (it restarts at 0 per direction). For
+    // every mapped field, follow the mapping word to its data object and record the
+    // binding. Call AFTER the dictionary is attached to the slave; the data_entry
+    // pointers stay valid as long as the dictionary is not reallocated.
+    std::vector<PdoBinding> enumeratePdoBindings(kickcat::CoE::Dictionary &dict)
+    {
+        using namespace kickcat;
+        std::vector<PdoBinding> bindings;
+
+        uint32_t input_bit_offset = 0;
+        uint32_t output_bit_offset = 0;
+
+        for (uint16_t assign = 0x1C10; assign <= 0x1C1F; ++assign)
+        {
+            auto [assign_obj, assign_count] = CoE::findObject(dict, assign, 0);
+            if (assign_count == nullptr or assign_count->data == nullptr)
+            {
+                continue;
+            }
+            uint8_t pdo_count = *static_cast<uint8_t *>(assign_count->data);
+
+            for (uint8_t i = 1; i <= pdo_count; ++i)
+            {
+                auto [assign_entry_obj, assign_entry] = CoE::findObject(dict, assign, i);
+                if (assign_entry == nullptr or assign_entry->data == nullptr)
+                {
+                    continue;
+                }
+                uint16_t pdo_index = *static_cast<uint16_t *>(assign_entry->data);
+
+                PdoDirection dir = PdoDirection::Output;
+                if (isTxPdoIndex(pdo_index))
+                {
+                    dir = PdoDirection::Input;
+                }
+
+                uint32_t *bit_offset = &output_bit_offset;
+                if (dir == PdoDirection::Input)
+                {
+                    bit_offset = &input_bit_offset;
+                }
+
+                auto [pdo_obj, pdo_count_entry] = CoE::findObject(dict, pdo_index, 0);
+                if (pdo_count_entry == nullptr or pdo_count_entry->data == nullptr)
+                {
+                    continue;
+                }
+                uint8_t entry_count = *static_cast<uint8_t *>(pdo_count_entry->data);
+
+                for (uint8_t s = 1; s <= entry_count; ++s)
+                {
+                    auto [map_obj, map_entry] = CoE::findObject(dict, pdo_index, s);
+                    if (map_entry == nullptr or map_entry->data == nullptr)
+                    {
+                        continue;
+                    }
+                    uint32_t word = *static_cast<uint32_t *>(map_entry->data);
+                    uint16_t tgt_index = static_cast<uint16_t>(
+                        (word & CoE::PDO::MAPPING_INDEX_MASK) >> CoE::PDO::MAPPING_INDEX_SHIFT);
+                    uint8_t tgt_sub = static_cast<uint8_t>(
+                        (word & CoE::PDO::MAPPING_SUB_MASK) >> CoE::PDO::MAPPING_SUB_SHIFT);
+                    uint16_t bits = static_cast<uint16_t>(word & CoE::PDO::MAPPING_LENGTH_MASK);
+
+                    // ETG.1000.6 Tables 74/75: index 0 is a padding gap, no data object.
+                    if (tgt_index == 0)
+                    {
+                        *bit_offset += bits;
+                        continue;
+                    }
+
+                    auto [tgt_obj, tgt_entry] = CoE::findObject(dict, tgt_index, tgt_sub);
+
+                    PdoBinding b;
+                    b.data_entry = tgt_entry;
+                    b.data_index = tgt_index;
+                    b.data_sub = tgt_sub;
+                    b.pi_bit_offset = *bit_offset;
+                    b.bit_len = bits;
+                    b.direction = dir;
+                    if (pdo_obj != nullptr)
+                    {
+                        b.channel_name = pdo_obj->name;
+                    }
+                    b.entry_name = map_entry->description;
+                    bindings.push_back(std::move(b));
+
+                    *bit_offset += bits;
+                }
+            }
+        }
+
+        return bindings;
+    }
+
+    // Resolve a JSON PDO name ("Channel 1/Input" or just "Input") against the bindings.
+    // Matching uses the human-readable mapping-object metadata, but the returned binding
+    // points at the DATA object -- this is the is_mapped fix.
+    PdoBinding const &resolvePdoBinding(std::vector<PdoBinding> const &bindings,
+                                        std::string const &pdo_name)
+    {
+        std::string channel;
+        std::string entry = pdo_name;
+        auto slash = pdo_name.find('/');
+        if (slash != std::string::npos)
+        {
+            channel = pdo_name.substr(0, slash);
+            entry = pdo_name.substr(slash + 1);
+        }
+
+        for (auto const &b : bindings)
+        {
+            if (not channel.empty() and b.channel_name != channel)
+            {
+                continue;
+            }
+            if (b.entry_name == entry)
+            {
+                return b;
+            }
+        }
+
+        throw std::runtime_error("PDO entry not found: " + pdo_name);
+    }
+
+    // Little-endian read/write of a bit field in the process image. Handles sub-byte
+    // fields (an EL1004 packs four 1-bit BOOLs in one byte) and any alignment up to
+    // 64 bits. `pi` is the buffer passed to PDO::setInput / PDO::setOutput.
+    uint64_t readPiBits(uint8_t const *pi, uint32_t bit_offset, uint16_t bit_len)
+    {
+        uint64_t value = 0;
+        for (uint16_t i = 0; i < bit_len; ++i)
+        {
+            uint32_t bit = bit_offset + i;
+            uint64_t b = (pi[bit / 8] >> (bit % 8)) & 0x1u;
+            value |= (b << i);
+        }
+        return value;
+    }
+
+    void writePiBits(uint8_t *pi, uint32_t bit_offset, uint16_t bit_len, uint64_t value)
+    {
+        for (uint16_t i = 0; i < bit_len; ++i)
+        {
+            uint32_t bit = bit_offset + i;
+            uint8_t mask = static_cast<uint8_t>(1u << (bit % 8));
+            uint64_t b = (value >> i) & 0x1u;
+            if (b != 0)
+            {
+                pi[bit / 8] |= mask;
+            }
+            else
+            {
+                pi[bit / 8] &= static_cast<uint8_t>(~mask);
+            }
+        }
+    }
+}
 
 static kickcat::eeprom::SII ReadEepromSII(std::filesystem::path const &eeprom_path)
 {
@@ -219,10 +410,15 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
 {
     // This function loads the mapping between FMU variables and EtherCAT PDOs from the provided JSON configuration and the CoE dictionary, and stores it in the provided mappings vector.
 
+    // is_mapped fix: resolve every PDO name to the DATA object (whose is_mapped flips
+    // true at SAFE_OP), not the PDO mapping object. One walk replays the slave-side
+    // mapping so we also learn each field's absolute bit offset in the SM image.
+    auto bindings = enumeratePdoBindings(dict);
+
+    std::cerr << "\n===== DICTIONARY DUMP slave " << slave_index << " =====\n";
+    std::cerr << "dict size = " << dict.size() << "\n";
     for (auto &object : dict)
     {
-        std::cerr << "\n===== DICTIONARY DUMP slave " << slave_index << " =====\n";
-        std::cerr << "dict size = " << dict.size() << "\n";
         std::cout << "Object 0x" << std::hex << object.index
                   << std::dec << " name='" << object.name << "'\n";
 
@@ -249,19 +445,16 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
 
         if (variable.is_real())
         {
-            auto var = variable.as_real();
             vr = variable.value_reference;
             fmuVarType = EtherDOG::FmuVariableType::REAL;
         }
         else if (variable.is_integer())
         {
-            auto var = variable.as_integer();
             vr = variable.value_reference;
             fmuVarType = EtherDOG::FmuVariableType::INTEGER32;
         }
         else if (variable.is_boolean())
         {
-            auto var = variable.as_boolean();
             vr = variable.value_reference;
             fmuVarType = EtherDOG::FmuVariableType::BOOLEAN;
         }
@@ -271,67 +464,35 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
             continue; // Skip unsupported variable types
         }
 
-        bool mapping_found = false;
+        // Bind to the DATA object (is_mapped lives here) with the real PI bit offset.
+        // resolvePdoBinding throws if the name is unknown, matching the old behaviour.
+        PdoBinding const &b = resolvePdoBinding(bindings, pdo_name);
 
-        std::string ChannelName;
-        std::string EntryName = pdo_name;
+        std::cout
+            << "[DEBUG] JSON PDO name '" << pdo_name
+            << "' resolved to DATA object 0x"
+            << std::hex << b.data_index
+            << ":" << std::dec << int(b.data_sub)
+            << " channel='" << b.channel_name << "'"
+            << " entry='" << b.entry_name << "'"
+            << " pi_bit_offset=" << b.pi_bit_offset
+            << " bitlen=" << b.bit_len
+            << " is_mapped=" << (b.data_entry ? b.data_entry->is_mapped : false)
+            << std::endl;
 
-        auto slash = pdo_name.find('/');
-        if (slash != std::string::npos)
-        {
-            ChannelName = pdo_name.substr(0, slash);
-            EntryName = pdo_name.substr(slash + 1);
-        }
+        EtherDOG::Mapping m{
+            vr,
+            (size_t)((b.bit_len + 7) / 8),
+            pdo_name,
+            slave_index,
+            fmu_var,
+            fmuVarType,
+            b.data_entry,
+            false};
 
-        for (auto &object : dict)
-        {
-            if (!ChannelName.empty() && object.name != ChannelName)
-            {
-                continue;
-            }
-
-            for (auto &entry : object.entries)
-            {
-                if (entry.description == EntryName)
-                {
-                    std::cout
-                        << "[DEBUG] JSON PDO name '" << pdo_name
-                        << "' resolved to object 0x"
-                        << std::hex << object.index
-                        << ":" << std::dec << int(entry.subindex)
-                        << " object_name='" << object.name << "'"
-                        << " entry_desc='" << entry.description << "'"
-                        << " bitlen=" << entry.bitlen
-                        << " is_mapped=" << entry.is_mapped
-                        << std::endl;
-
-                    EtherDOG::Mapping m{
-                        vr,
-                        (size_t)((entry.bitlen + 7) / 8),
-                        pdo_name,
-                        slave_index,
-                        fmu_var,
-                        fmuVarType,
-                        &entry,
-                        false};
-
-                    mappings.push_back(m);
-                    mapping_found = true;
-                    break;
-                }
-            }
-
-            if (mapping_found)
-            {
-                break;
-            }
-        }
-
-        if (!mapping_found)
-        {
-            std::cerr << "PDO entry not found: " << pdo_name << std::endl;
-            throw std::runtime_error("PDO entry not found: " + pdo_name);
-        }
+        m.PiBitOffset = b.pi_bit_offset;
+        m.BitLen = b.bit_len;
+        mappings.push_back(m);
     }
 }
 
@@ -380,56 +541,64 @@ void EtherDOG::ExecutePdoInputMappings()
                 spdlog::warn("[Slave index {}] Warning: CoE entry for PDO '{}' is not mapped. Skipping mapping for this entry.", m.SlaveIndex, m.PDOname);
                 m.MessagePrinted = true; // Set the flag to true after printing the warning message
             }
+            continue;
         }
-        else
+
+        // Write into the input PI buffer at the field's bit offset (handles sub-byte
+        // fields such as the EL1004's four 1-bit BOOLs sharing one byte).
+        uint8_t *pi = input_pdo[m.SlaveIndex].data();
+
+        switch (m.fmuVarType)
         {
-            switch (m.fmuVarType)
+        case FmuVariableType::REAL:
+        {
+            double fmu_output;
+            if (!fmu_slave->read_real(m.vr, fmu_output))
             {
-            case FmuVariableType::REAL:
-            {
-                double fmu_output;
-                if (!fmu_slave->read_real(m.vr, fmu_output))
-                {
-                    spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
-                    continue;
-                }
-                WriteFmuDoubleToPdo(m, fmu_output);
-                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
-                break;
+                spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
+                continue;
             }
+            writePiBits(pi, m.PiBitOffset, m.BitLen, static_cast<uint64_t>(static_cast<int64_t>(fmu_output)));
+            spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+            break;
+        }
 
-            case FmuVariableType::INTEGER32:
+        case FmuVariableType::INTEGER32:
+        {
+            int32_t fmu_output;
+            if (!fmu_slave->read_integer(m.vr, fmu_output))
             {
-                int32_t fmu_output;
-                if (!fmu_slave->read_integer(m.vr, fmu_output))
-                {
-                    spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
-                    continue;
-                }
-                WriteFmuIntToPdo(m, fmu_output);
-                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
-                break;
+                spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
+                continue;
             }
+            writePiBits(pi, m.PiBitOffset, m.BitLen, static_cast<uint64_t>(static_cast<uint32_t>(fmu_output)));
+            spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+            break;
+        }
 
-            case FmuVariableType::BOOLEAN:
+        case FmuVariableType::BOOLEAN:
+        {
+            fmi2Boolean fmu_output;
+            if (!fmu_slave->read_boolean(m.vr, fmu_output))
             {
-                fmi2Boolean fmu_output;
-                if (!fmu_slave->read_boolean(m.vr, fmu_output))
-                {
-                    spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
-                    continue;
-                }
-                WriteFmuBoolToPdo(m, fmu_output);
-                spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
-                break;
+                spdlog::error("[Slave index {}] Error reading FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
+                continue;
             }
+            uint64_t bit = 0;
+            if (fmu_output)
+            {
+                bit = 1;
+            }
+            writePiBits(pi, m.PiBitOffset, m.BitLen, bit);
+            spdlog::info("[Slave index {}] Mapping FMU variable '{}' to PDO variable '{}' value= {}", m.SlaveIndex, m.FMUname, m.PDOname, fmu_output);
+            break;
+        }
 
-            default:
-            {
-                spdlog::warn("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping writing to PDO for this variable.", m.SlaveIndex, m.FMUname);
-                continue; // Skip unsupported variable types
-            }
-            }
+        default:
+        {
+            spdlog::warn("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping writing to PDO for this variable.", m.SlaveIndex, m.FMUname);
+            continue; // Skip unsupported variable types
+        }
         }
     }
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again
@@ -442,59 +611,66 @@ void EtherDOG::ExecutePdoOutputMappings()
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : output_mappings)
     {
-        if (!m.entry->is_mapped)
+        if (m.entry == nullptr || !m.entry->is_mapped)
         {
             if (!m.MessagePrinted)
             {
                 spdlog::warn("[Slave index {}] Warning: CoE entry for PDO '{}' is not mapped. Skipping mapping for this entry.", m.SlaveIndex, m.PDOname);
                 m.MessagePrinted = true; // Set the flag to true after printing the warning message
             }
+            continue;
         }
-        else
+
+        // Read the output PI buffer at the field's bit offset.
+        uint8_t const *pi = output_pdo[m.SlaveIndex].data();
+        uint64_t raw = readPiBits(pi, m.PiBitOffset, m.BitLen);
+
+        switch (m.fmuVarType)
         {
-            switch (m.fmuVarType)
+        case FmuVariableType::REAL:
+        {
+            double fmu_input = static_cast<double>(static_cast<int64_t>(raw));
+            if (!fmu_slave->write_real(m.vr, fmu_input))
             {
-            case FmuVariableType::REAL:
-            {
-                double fmu_input = ReadPdoToFmuDouble(m);
-                if (!fmu_slave->write_real(m.vr, fmu_input))
-                {
-                    spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
-                    continue;
-                }
-                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
-                break;
+                spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
+                continue;
             }
+            spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+            break;
+        }
 
-            case FmuVariableType::INTEGER32:
+        case FmuVariableType::INTEGER32:
+        {
+            int32_t fmu_input = static_cast<int32_t>(static_cast<uint32_t>(raw));
+            if (!fmu_slave->write_integer(m.vr, fmu_input))
             {
-                int32_t fmu_input = ReadPdoToFmuInt(m);
-                if (!fmu_slave->write_integer(m.vr, fmu_input))
-                {
-                    spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
-                    continue;
-                }
-                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
-                break;
+                spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
+                continue;
             }
+            spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+            break;
+        }
 
-            case FmuVariableType::BOOLEAN:
+        case FmuVariableType::BOOLEAN:
+        {
+            fmi2Boolean fmu_input = 0;
+            if (raw != 0)
             {
-                fmi2Boolean fmu_input = ReadPdoToFmuBool(m);
-                if (!fmu_slave->write_boolean(m.vr, fmu_input))
-                {
-                    spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
-                    continue;
-                }
-                spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
-                break;
+                fmu_input = 1;
             }
-            default:
+            if (!fmu_slave->write_boolean(m.vr, fmu_input))
             {
-                spdlog::warn("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping reading from PDO for this variable.", m.SlaveIndex, m.FMUname);
-                continue; // Skip unsupported variable types
+                spdlog::error("[Slave index {}] Error writing FMU variable with VR {}: {}", m.SlaveIndex, m.vr, to_string(fmu_slave->last_status()));
+                continue;
             }
-            }
+            spdlog::info("[Slave index {}] Mapping PDO variable '{}' to FMU variable '{}' value= {}", m.SlaveIndex, m.PDOname, m.FMUname, fmu_input);
+            break;
+        }
+        default:
+        {
+            spdlog::warn("[Slave index {}] Unsupported FMU variable type for variable '{}'. Skipping reading from PDO for this variable.", m.SlaveIndex, m.FMUname);
+            continue; // Skip unsupported variable types
+        }
         }
     }
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again

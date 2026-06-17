@@ -29,6 +29,7 @@
 #include <kickcat/ESI/SIIBuilder.h>
 #include "kickcat/CoE/OD.h"
 #include "kickcat/EmulatedNetwork.h"
+#include "kickcat/CoE/protocol.h"
 
 using namespace fmi4cpp;
 using namespace kickcat;
@@ -75,6 +76,9 @@ public:
         FmuVariableType fmuVarType;
         CoE::Entry *entry; // the CoE entry corresponding to this mapping
         bool MessagePrinted;
+
+        uint32_t PiBitOffset = 0; // absolute bit offset of the field in the SM image
+        uint16_t BitLen = 0;      // field width in bits
     };
 
 private:
