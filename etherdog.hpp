@@ -40,6 +40,7 @@ class EtherDOG
 {
 public:
     std::string fmu_path;
+    bool load_config_only = false;
     void loadFMU(const std::string &path);
     void start();
     void run();

@@ -35,6 +35,12 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
         .required()
         .store_into(config_file);
 
+    program.add_argument("--load-config-only")
+        .help("load the selected configuration and print device/mapping information without starting the simulation")
+        .default_value(false)
+        .implicit_value(true)
+        .store_into(load_config_only);
+
     try
     {
         program.parse_args(argc, argv);

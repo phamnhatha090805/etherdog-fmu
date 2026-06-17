@@ -41,6 +41,12 @@ int main(int argc, char *argv[])
         etherdog.loadFMU(etherdog.fmu_path);
         etherdog.SetupMappingFile();
         spdlog::info("Load configuration successfully. Simulation has not started yet.");
+
+        if (etherdog.load_config_only)
+        {
+            spdlog::info("Load configuration only mode selected. Exiting before simulation start.");
+            return 0;
+        }
     }
     catch (const std::exception &e)
     {
