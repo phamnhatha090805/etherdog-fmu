@@ -8,9 +8,6 @@
             "input-mappings": {
                 "RoomTemperature": "AnalogIN0",
                 "OutdoorSensor": "AnalogIN1"
-            },
-            "output-mappings": {
-                "HeaterGain": "AnalogOUT0"
             }
         },
         {
