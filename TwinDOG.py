@@ -4,6 +4,8 @@ import subprocess
 import threading
 import os
 import signal
+import zipfile
+import base64
 
 from PyQt5.QtWidgets import (
     QApplication,
@@ -16,9 +18,11 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QFileDialog,
     QComboBox,
+    QFrame,
 )
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtGui import QPixmap
 
 
 def get_interfaces():
@@ -75,6 +79,16 @@ class SimulatorGUI(QWidget):
         self.stop_btn = QPushButton("Stop Simulation")
         self.stop_btn.clicked.connect(self.stop_simulation)
 
+        # -- FMU Model Image Display ---
+        self.model_image_original = None
+        self.model_image_label = QLabel(
+            "FMU model image will appear here after Load Configuration."
+        )
+        self.model_image_label.setAlignment(Qt.AlignCenter)
+        self.model_image_label.setMinimumHeight(260)
+        self.model_image_label.setFrameShape(QFrame.StyledPanel)
+        self.model_image_label.setScaledContents(False)
+
         # -- Output Display ---
         self.output = QTextEdit()
         self.output.setReadOnly(True)
@@ -120,6 +134,8 @@ class SimulatorGUI(QWidget):
         )  # -- Add the load configuration button to the main layout
         layout.addWidget(self.run_btn)  # -- Add the run button to the main layout
         layout.addWidget(self.stop_btn)  # -- Add the stop button to the main layout
+        layout.addWidget(QLabel("FMU Model Preview:"))
+        layout.addWidget(self.model_image_label)
         layout.addWidget(self.output)  # -- Add the output display to the main layout
 
         self.setLayout(layout)  # -- Set the main layout for the window
@@ -141,6 +157,127 @@ class SimulatorGUI(QWidget):
         )
         if file_path:
             self.config_input.setText(file_path)
+
+    def clear_fmu_model_image(self, message="No FMU model image found."):
+        # -- Clear the current FMU image preview and show a readable status message.
+        self.model_image_original = None
+        self.model_image_label.setPixmap(QPixmap())
+        self.model_image_label.setText(message)
+        self.model_image_label.setToolTip("")
+
+    def resizeEvent(self, event):
+        # -- Keep the FMU image preview scaled when the window is resized.
+        super().resizeEvent(event)
+        self.update_fmu_model_image_size()
+
+    def update_fmu_model_image_size(self):
+        # -- Scale the original image to fit the QLabel while preserving aspect ratio.
+        if self.model_image_original is None or self.model_image_original.isNull():
+            return
+
+        target_size = self.model_image_label.size()
+        if target_size.width() <= 0 or target_size.height() <= 0:
+            return
+
+        scaled = self.model_image_original.scaled(
+            target_size,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+        self.model_image_label.setPixmap(scaled)
+
+    def resolve_fmu_path_from_config(self, config_path):
+        # -- Read fmuPath from the selected JSON config and resolve relative paths.
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+        except Exception as e:
+            return None, f"Could not read config JSON: {e}"
+
+        fmu_path = config.get("fmuPath")
+        if not fmu_path:
+            return None, "Config JSON has no fmuPath field."
+
+        fmu_path = os.path.expanduser(fmu_path)
+
+        if os.path.isabs(fmu_path):
+            return os.path.normpath(fmu_path), ""
+
+        config_dir = os.path.dirname(os.path.abspath(config_path))
+        executable_dir = os.path.dirname(
+            os.path.abspath(self.executable_input.text().strip())
+        )
+
+        candidates = [
+            os.path.normpath(os.path.join(config_dir, fmu_path)),
+            os.path.normpath(os.path.join(executable_dir, fmu_path)),
+            os.path.normpath(os.path.abspath(fmu_path)),
+        ]
+
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate, ""
+
+        return candidates[0], "FMU file does not exist at the resolved path."
+
+    def show_fmu_model_image(self):
+        # -- Show model.png from inside the FMU, similar to how FMPy does it.
+        config_path = self.config_input.text().strip()
+        fmu_path, error = self.resolve_fmu_path_from_config(config_path)
+
+        if error:
+            self.clear_fmu_model_image(error)
+            self.append_output(f"FMU image preview: {error}")
+            return
+
+        try:
+            with zipfile.ZipFile(fmu_path, "r") as fmu_zip:
+                # FMPy expects the FMU diagram at the root of the FMU as model.png.
+                model_png_name = None
+                for name in fmu_zip.namelist():
+                    if name.lower() == "model.png":
+                        model_png_name = name
+                        break
+
+                if model_png_name is None:
+                    self.clear_fmu_model_image("This FMU does not contain model.png.")
+                    self.append_output(
+                        "FMU image preview: no model.png found inside the FMU."
+                    )
+                    return
+
+                image_bytes = fmu_zip.read(model_png_name)
+
+            pixmap = QPixmap()
+            if not pixmap.loadFromData(image_bytes, "PNG"):
+                self.clear_fmu_model_image(
+                    "model.png exists, but Qt could not load it."
+                )
+                self.append_output(
+                    "FMU image preview: model.png could not be loaded as a PNG image."
+                )
+                return
+
+            self.model_image_original = pixmap
+            self.model_image_label.setText("")
+            self.update_fmu_model_image_size()
+
+            # Show the full unscaled image in the tooltip, like FMPy does.
+            encoded = base64.b64encode(image_bytes).decode("ascii")
+            self.model_image_label.setToolTip(
+                f'<img src="data:image/png;base64,{encoded}">'
+            )
+
+            self.append_output(f"FMU image preview loaded: {fmu_path}")
+
+        except zipfile.BadZipFile:
+            self.clear_fmu_model_image("Selected FMU is not a valid ZIP/FMU file.")
+            self.append_output(
+                "FMU image preview: selected FMU is not a valid ZIP/FMU file."
+            )
+        except Exception as e:
+            self.clear_fmu_model_image(f"Could not load FMU image: {e}")
+            self.append_output(f"FMU image preview error: {e}")
 
     def append_output(
         self, text
@@ -229,6 +366,8 @@ class SimulatorGUI(QWidget):
         if cmd is None:
             return
 
+        self.show_fmu_model_image()
+
         cmd.append("--load-config-only")
         self.configuration_loaded = False
         self.append_output(f"Loading configuration: {' '.join(cmd)}")
@@ -248,6 +387,7 @@ class SimulatorGUI(QWidget):
         if cmd is None:
             return
 
+        self.show_fmu_model_image()
         self.append_output(f"Running: {' '.join(cmd)}")
 
         thread = threading.Thread(target=self.execute_command, args=(cmd, "simulation"))
