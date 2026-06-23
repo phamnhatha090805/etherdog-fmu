@@ -440,7 +440,6 @@ python -m pip install "fmpy[complete]"
 From the build directory:
 
 ```bash
-cd ~/etherdog-fmu/build
 sudo ./etherdog-fmu -f ../Examples/SimConfigDemo.json
 ```
 
