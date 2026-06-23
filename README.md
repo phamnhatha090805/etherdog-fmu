@@ -1,4 +1,4 @@
-# EtherDOG-FMU
+# EtherDOG
 
 **EtherDOG** (**EtherCAT Dynamic Object Generator**) is a software-defined EtherCAT device simulation platform. It allows users to create and run virtual EtherCAT slave devices whose behaviour is controlled by FMU models.
 
@@ -219,14 +219,14 @@ find_package(fmi4cpp REQUIRED)
 
 ---
 
-## 6. Clone and build EtherDOG-FMU
+## 6. Clone and build EtherDOG
 
 Clone this repository:
 
 ```bash
 cd ~
-git clone https://github.com/phamnhatha090805/etherdog-fmu.git
-cd etherdog-fmu
+git clone https://github.com/phamnhatha090805/EtherDOG.git
+cd EtherDOG
 ```
 
 Create a build folder:
@@ -262,7 +262,180 @@ After a successful build, the executable should be available as:
 
 ---
 
-## 7. Run the first example
+## 7. Why FMPy is needed
+
+EtherDOG uses an FMU model to simulate the behaviour of the virtual EtherCAT device, machine, plant, sensor, actuator, or system. During runtime, EtherDOG loads the FMU through `fmi4cpp`, connects FMU variables to EtherCAT PDO entries, and steps the FMU simulation while EtherCAT frames are being processed.
+
+This means EtherDOG does not only need a valid `.fmu` file. It needs an FMU that can actually run on the same machine where EtherDOG is running.
+
+This is important because an FMU is not always fully platform-independent. An `.fmu` file is a ZIP package. It can contain:
+
+* `modelDescription.xml`
+* platform-specific compiled binaries
+* C source files
+* resources
+* documentation
+
+If the FMU contains a compiled binary, that binary is specific to an operating system and computer architecture.
+
+For example:
+
+| Target machine        | Typical architecture | FMU binary needed                      |
+| --------------------- | -------------------: | -------------------------------------- |
+| Windows PC            |               x86_64 | Windows binary, for example `.dll`     |
+| WSL Ubuntu / Linux PC |               x86_64 | Linux x86_64 binary, for example `.so` |
+| Raspberry Pi 64-bit   |      aarch64 / ARM64 | Linux ARM64 binary, for example `.so`  |
+| Raspberry Pi 32-bit   |         armv7l / ARM | Linux ARM binary, for example `.so`    |
+
+A common problem is exporting an FMU from Simulink on a PC and then copying it directly to a Raspberry Pi. The FMU may contain source files or a binary for another platform, but not a binary that the Raspberry Pi can load. In that case, EtherDOG cannot run the FMU even if the JSON mapping, ESI file, EEPROM file, and EtherCAT setup are correct.
+
+FMPy is used before running EtherDOG to check and re-built the FMU if needed.
+
+In short:
+
+```text
+EtherDOG runs the FMU.
+FMPy checks and prepares the FMU before EtherDOG runs it.
+```
+
+Use this workflow below whenever you create a new FMU or move an FMU to another machine, especially when moving between a PC, WSL Ubuntu, and Raspberry Pi.
+
+### 7.1 Install FMPy
+
+Create and activate a Python virtual environment:
+
+```bash
+cd ~
+python3 -m venv venv
+source ~/venv/bin/activate
+```
+
+Install FMPy:
+
+```bash
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install "fmpy[complete]"
+```
+
+Open the FMPy GUI:
+
+```bash
+python -m fmpy.gui
+```
+
+### 7.2 Extra Ubuntu / WSL GUI dependencies
+
+On Ubuntu or WSL, the FMPy GUI may need extra Qt/WebEngine system libraries.
+
+Install them with:
+
+```bash
+sudo apt update
+sudo apt install -y \
+    libnspr4 \
+    libnss3 \
+    libasound2t64 \
+    libxss1 \
+    libxtst6 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libdbus-1-3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxkbcommon-x11-0 \
+    libxcb-cursor0 \
+    libxcb-xinerama0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-render-util0 \
+    libxcb-randr0 \
+    libxcb-shape0 \
+    libxcb-sync1 \
+    libxcb-xfixes0 \
+    libgl1 \
+    libegl1 \
+    libglib2.0-0
+```
+
+### 7.3 Rebuild or re-export the FMU if needed
+
+Use this rule:
+
+```text
+If the FMU already contains a binary for the target machine:
+    You can use it directly with EtherDOG.
+
+If the FMU contains source code but no correct binary:
+    Compile or rebuild the FMU for the target machine.
+
+If the FMU does not contain a binary for the target machine:
+    Re-export the FMU from the original modelling tool for the correct platform.
+```
+
+For example, if EtherDOG runs on Raspberry Pi 64-bit and the FMU only contains `binaries/win64` or `binaries/linux64`, the FMU will not run correctly on the Pi. The FMU must be rebuilt or re-exported for Linux ARM64 / `aarch64`.
+
+### 7.4 Recommended EtherDOG workflow with FMU
+
+The recommended workflow is:
+
+```text
+1. Create or export the FMU from Simulink, Modelica, or another modelling tool.
+
+2. Copy the FMU to the machine where EtherDOG will run.
+
+3. Check the target machine architecture:
+       uname -m
+
+4. Inspect the FMU contents:
+       unzip -l model.fmu | grep -E "binaries|\.so|\.dll|sources"
+
+5. Open the FMU in FMPy:
+       source ~/venv/bin/activate
+       python -m fmpy.gui
+
+6. Validate, simulate, compile, rebuild, or re-export the FMU if needed.
+
+7. Update the EtherDOG JSON configuration so `fmuPath` points to the prepared FMU.
+
+8. Build and run EtherDOG.
+```
+
+Example JSON field:
+
+```json
+{
+  "fmuPath": "../Examples/FmuModel/DemoModel-1.fmu"
+}
+```
+
+Only run EtherDOG after the FMU has been checked on the target machine.
+
+### 7.5 Network note for installing FMPy
+
+FMPy is installed from PyPI. Some company or school networks may block or reset Python package downloads.
+
+If the installation fails with an error like:
+
+```text
+Connection reset by peer
+files.pythonhosted.org
+```
+
+try another network, then run the install command again:
+
+```bash
+python -m pip install "fmpy[complete]"
+```
+
+---
+
+## 8. Run the first example
 
 From the build directory:
 
@@ -305,16 +478,16 @@ EtherDOG should stop gracefully.
 
 ---
 
-## 8. Using the GUI
+## 9. Using the GUI
 
-EtherDOG-FMU also includes a simple Python GUI called `TwinDOG.py`.
+EtherDOG also includes a simple Python GUI called `TwinDOG.py`.
 
 The GUI provides a more user-friendly way to select the EtherDOG executable, choose the network interface, load a simulation configuration file, start the simulation, stop the simulation, and view the runtime log output.
 
 The GUI does not replace the JSON configuration file.
 It uses the same JSON configuration files as the command-line version.
 
-### 8.1 Install GUI dependencies
+### 9.1 Install GUI dependencies
 
 The GUI is written with PyQt5. Install PyQt5 before running the GUI:
 
@@ -328,12 +501,12 @@ Alternatively, PyQt5 can be installed with pip:
 python3 -m pip install PyQt5
 ```
 
-### 8.2 Start the GUI
+### 9.2 Start the GUI
 
-From the EtherDOG-FMU project folder, run:
+From the EtherDOG project folder, run:
 
 ```bash
-cd ~/etherdog-fmu
+cd ~/EtherDOG
 python3 TwinDOG.py
 ```
 
@@ -346,7 +519,7 @@ sudo -E python3 TwinDOG.py
 
 The `-E` option keeps the user environment, which can help when Python or PyQt5 is installed in the user environment.
 
-### 8.3 GUI fields
+### 9.3 GUI fields
 
 When the GUI opens, it shows several fields.
 
@@ -362,7 +535,7 @@ When the GUI opens, it shows several fields.
 ![GUI Overview](Images/gui-overview.png)
 ---
 
-## 9. JSON configuration format
+## 10. JSON configuration format
 
 EtherDOG uses a JSON file to define the virtual EtherCAT network.
 
@@ -407,7 +580,7 @@ Example:
 
 ---
 
-## 10. PDO naming rules
+## 11. PDO naming rules
 
 PDO names in the JSON file must match entries from the CoE object dictionary loaded from the ESI XML file.
 
@@ -440,7 +613,7 @@ This is useful for terminals such as EL4004, where multiple channels may have en
 
 ---
 
-## 11. Add multiple virtual slaves
+## 12. Add multiple virtual slaves
 
 The `slaves` field is an array, so you can add multiple virtual devices.
 
@@ -477,7 +650,7 @@ The order in the JSON file is the virtual EtherCAT slave order.
 
 ---
 
-## 12. Runtime behaviour
+## 13. Runtime behaviour
 
 EtherDOG runs two main runtime activities:
 
@@ -499,7 +672,7 @@ This creates a continuous data exchange loop between the EtherCAT master and the
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### CMake cannot find KickCAT
 
@@ -519,7 +692,7 @@ sudo ldconfig
 Then configure EtherDOG again:
 
 ```bash
-cd ~/etherdog-fmu
+cd ~/EtherDOG
 rm -rf build
 mkdir build
 cd build
@@ -627,7 +800,7 @@ Fix:
 
 ---
 
-## 14. Current limitations
+## 15. Current limitations
 
 EtherDOG is still a development/research platform. Current limitations may include:
 
@@ -640,25 +813,26 @@ EtherDOG is still a development/research platform. Current limitations may inclu
 
 ---
 
-## 15. Basic workflow summary
+## 16. Basic workflow summary
 
 ```text
 1. Install dependencies
 2. Build and install KickCAT
 3. Build and install FMI4cpp
-4. Build EtherDOG-FMU
-5. Select the correct network interface
-6. Choose or create a JSON simulation config
-7. Start EtherDOG with sudo
-8. Scan the virtual EtherCAT network from TwinCAT or another master
-9. Move the network to OP state
-10. Exchange PDO data between the PLC and the FMU model
+4. Check the FMU files using FMPy
+5. Build EtherDOG
+6. Select the correct network interface
+7. Choose or create a JSON simulation config
+8. Start EtherDOG with sudo
+9. Scan the virtual EtherCAT network from TwinCAT or another master
+10. Move the network to OP state
+11. Exchange PDO data between the PLC and the FMU model
 ```
 
 Quick command summary:
 
 ```bash
-cd ~/etherdog-fmu
+cd ~/EtherDOG
 mkdir -p build
 cd build
 cmake ..
@@ -668,15 +842,16 @@ sudo ./etherdog-fmu -f ../Examples/SimConfigDemo.json
 
 ---
 
-## 16. License and acknowledgements
+## 17. License and acknowledgements
 
-EtherDOG-FMU builds on top of several open-source projects:
+EtherDOG builds on top of several open-source projects:
 
 * [KickCAT](https://github.com/leducp/KickCAT) for the EtherCAT stack, slave emulation, CoE support, ESI parsing, and EtherCAT frame handling.
 * [FMI4cpp](https://github.com/NTNU-IHB/FMI4cpp) for loading and running FMU simulation models.
+* [FMPy](https://github.com/CATIA-Systems/FMPy) for loading, checking, or re-export FMU files.
 * [spdlog](https://github.com/gabime/spdlog) for logging.
 
-Special thanks to the developers and maintainers of KickCAT and FMI4cpp.  
-Their work made it possible for EtherDOG-FMU to focus on dynamic virtual EtherCAT device generation, PDO/FMU mapping, and simulation workflow development instead of re-implementing the complete EtherCAT and FMI foundations from scratch.
+Special thanks to the developers and maintainers of KickCAT, FMI4cpp, and FMPy.  
+Their work made it possible for EtherDOG to focus on dynamic virtual EtherCAT device generation, PDO/FMU mapping, and simulation workflow development instead of re-implementing the complete EtherCAT and FMI foundations from scratch.
 
-Please check the licenses of these projects before using EtherDOG-FMU in a commercial or redistributed system.
+Please check the licenses of these projects before using EtherDOG in a commercial or redistributed system.
