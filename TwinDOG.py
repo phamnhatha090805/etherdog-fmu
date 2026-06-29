@@ -53,7 +53,7 @@ class SimulatorGUI(QWidget):
         # --- Executable Selection ---
         self.executable_label = QLabel("TwinDOG Executable:")
         self.executable_input = QLineEdit()
-        self.executable_input.setText("/home/etherdog/etherdog-fmu/build/etherdog-fmu")
+        self.executable_input.setText(self.find_default_executable())
         self.executable_browse_btn = QPushButton("Browse")
         self.executable_browse_btn.clicked.connect(self.browse_executable)
 
@@ -139,6 +139,27 @@ class SimulatorGUI(QWidget):
         layout.addWidget(self.output)  # -- Add the output display to the main layout
 
         self.setLayout(layout)  # -- Set the main layout for the window
+
+    def find_default_executable(self):
+        # Find etherdog-fmu relative to where this GUI script is located.
+        # No sudo logic, no hardcoded Raspberry Pi username.
+
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+
+        candidates = [
+            os.path.join(script_dir, "build", "etherdog-fmu"),
+            os.path.join(script_dir, "etherdog-fmu"),
+            os.path.join(os.path.dirname(script_dir), "build", "etherdog-fmu"),
+            os.path.join(os.getcwd(), "build", "etherdog-fmu"),
+        ]
+
+        for candidate in candidates:
+            candidate = os.path.normpath(candidate)
+            if os.path.isfile(candidate):
+                return candidate
+
+        # Fallback: leave a reasonable default that user can still edit with Browse
+        return os.path.normpath(candidates[0])
 
     def browse_executable(
         self,
