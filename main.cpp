@@ -1,13 +1,14 @@
-#include <iostream>
+#include <argparse/argparse.hpp>
 #include <fmi4cpp/fmi4cpp.hpp>
+#include <iostream>
 
-#include <kickcat/KickCAT.h>
-#include <kickcat/CoE/EsiParser.h>
 #include "etherdog.hpp"
+#include <kickcat/CoE/EsiParser.h>
+#include <kickcat/KickCAT.h>
 
-#include <thread>
 #include <csignal>
 #include <spdlog/spdlog.h>
+#include <thread>
 
 using namespace fmi4cpp;
 using namespace kickcat;
@@ -18,7 +19,7 @@ void signalHandler(int signal)
 {
     if (signal == SIGINT || signal == SIGTERM)
     {
-        std::cout << "\nStop signal received, stopping simulation..." << std::endl;
+        spdlog::info("Stop signal received, stopping simulation...");
         if (GlobalEtherDOG != nullptr)
         {
             GlobalEtherDOG->requestStop();
@@ -33,20 +34,45 @@ int main(int argc, char *argv[])
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     spdlog::info("EtherDOG FMU simulation starting...");
+
+    std::string config_file;
+    argparse::ArgumentParser program("network_simulator");
+
+    program.add_argument("-f", "--file").help("simple configuration file").required().store_into(config_file);
+
+    try
+    {
+        program.parse_args(argc, argv);
+    }
+    catch (const std::runtime_error &err)
+    {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        return 1;
+    }
+
+    std::ifstream file(config_file);
+    if (!file.is_open())
+    {
+        std::cerr << "Failed to open configuration file: " << config_file << std::endl;
+        return 1;
+    }
+
+    json main_config;
+    file >> main_config;
+
+    fs::path main_config_path = fs::path(config_file);
+    fs::path config_dir = main_config_path.parent_path();
+
+    fs::path fmu_path = config_dir / main_config["fmuPath"].get<std::string>();
     EtherDOG etherdog;
     GlobalEtherDOG = &etherdog; // Set the global instance to the created EtherDOG object
     try
     {
-        etherdog.StartNetworks(argc, argv);
-        etherdog.loadFMU(etherdog.fmu_path);
-        etherdog.SetupMappingFile();
+        etherdog.StartNetworks(config_dir, main_config);
+        etherdog.loadFMU(fmu_path);
+        etherdog.SetupMappingFile(main_config);
         spdlog::info("Load configuration successfully. Simulation has not started yet.");
-
-        if (etherdog.load_config_only)
-        {
-            spdlog::info("Load configuration only mode selected. Exiting before simulation start.");
-            return 0;
-        }
     }
     catch (const std::exception &e)
     {

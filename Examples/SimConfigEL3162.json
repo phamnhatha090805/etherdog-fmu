@@ -1,14 +1,14 @@
 {
     "interface": "eth0",
-    "fmuPath": "../Examples/FmuModel/SimConfigDouble-1.fmu",
+    "fmuPath": "FmuModel/SimConfigDouble-1.fmu",
     "slaves": [
         {
-            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 1 (EK1100).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
+            "eeprom": "EsiFiles/BIN/Official Beckhoff/Term 1 (EK1100).bin",
+            "coe_xml": "EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
         },
         {
-            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL3162).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL31xx.xml",
+            "eeprom": "EsiFiles/BIN/Official Beckhoff/Term 2 (EL3162).bin",
+            "coe_xml": "EsiFiles/XML/Official Beckhoff/Beckhoff EL31xx.xml",
             "output-mappings": {
                 "In1": "AI Inputs Ch.1/Value"
             }

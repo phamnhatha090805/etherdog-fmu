@@ -414,24 +414,7 @@ Example JSON field:
 }
 ```
 
-Only run EtherDOG after the FMU has been checked on the target machine.
-
-### 7.5 Network note for installing FMPy
-
-FMPy is installed from PyPI. Some company or school networks may block or reset Python package downloads.
-
-If the installation fails with an error like:
-
-```text
-Connection reset by peer
-files.pythonhosted.org
-```
-
-try another network, then run the install command again:
-
-```bash
-python -m pip install "fmpy[complete]"
-```
+Only run EtherDOG after the FMU has been checked on the target machine to avoid errors.
 
 ---
 
