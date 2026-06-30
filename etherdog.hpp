@@ -51,7 +51,7 @@ class EtherDOG
     int StartNetworks(const fs::path &config_dir, const nlohmann::json &main_config);
     void FrameHandler();
 
-    void SetupMappingFile(const nlohmann::json &main_config);
+    void SetupMappingFile(const nlohmann::json &main_config, const bool verbose);
 
     const double stopTime = 10.0;
     const double stepSize = 0.1; // this is in seconds
@@ -73,6 +73,11 @@ class EtherDOG
         FmuVariableType fmuVarType;
         CoE::Entry *entry; // the CoE entry corresponding to this mapping
         bool MessagePrinted;
+
+        uint32_t PiBitOffset = 0; // absolute bit offset of the field in the SM image
+        uint16_t BitLen = 0;      // field width in bits
+        uint8_t *input_process_image = nullptr;
+        uint8_t const *output_process_image = nullptr;
     };
 
   private:

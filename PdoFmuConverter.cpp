@@ -1,14 +1,55 @@
 #include "PdoFmuConverter.hpp"
 
-template <typename Target, typename Source>
-static void WriteAs(void *destination, Source value)
+// Little-endian read/write of a bit field in the process image. Handles sub-byte
+// fields (an EL1004 packs four 1-bit BOOLs in one byte) and any alignment up to
+// 64 bits. `pi` is the buffer passed to PDO::setInput / PDO::setOutput.
+void readPiBits(uint8_t const *pi, uint32_t bit_offset, uint16_t bit_len, uint8_t *buffer)
 {
-    Target converted = static_cast<Target>(value);
-    std::memcpy(destination, &converted, sizeof(Target));
+    for (uint16_t i = 0; i < bit_len; ++i)
+    {
+        uint32_t bit = bit_offset + i;
+        uint64_t b = (pi[bit / 8] >> (bit % 8)) & 0x1u;
+        buffer[i / 8] |= (b << (i % 8));
+    }
 }
 
-template <typename Source>
-static void WriteFmuToPdo(const EtherDOG::Mapping &m, Source value)
+void writePiBits(uint8_t *pi, uint32_t bit_offset, uint16_t bit_len, const uint8_t *buffer)
+{
+    for (uint16_t i = 0; i < bit_len; ++i)
+    {
+        uint32_t bit = bit_offset + i;
+        uint8_t mask = static_cast<uint8_t>(1u << (bit % 8));
+        // TODO: check endianness and bit ordering
+        uint64_t b = (buffer[bit / 8] >> (bit % 8)) & 0x1u;
+        if (b == 0)
+        {
+            pi[bit / 8] &= static_cast<uint8_t>(~mask);
+        }
+        else
+        {
+            pi[bit / 8] |= mask;
+        }
+    }
+}
+
+template <typename Target, typename Source> static void WriteAs(const EtherDOG::Mapping &m, Source value)
+{
+
+    // step 1: convert:
+    Target converted = static_cast<Target>(value);
+
+    // Step 2: convert to bytes:
+    uint8_t buffer[8]; // temp buffer.
+    static_assert(sizeof(Target) <= 8, "Target type is too large for buffer");
+    std::memcpy(buffer, &converted, sizeof(Target));
+
+    // Step 3: write to pi:
+    assert(m.BitLen <= 64);
+    assert(m.input_process_image != nullptr);
+    writePiBits(m.input_process_image, m.PiBitOffset, m.BitLen, buffer);
+}
+
+template <typename Source> static void WriteFmuToPdo(const EtherDOG::Mapping &m, Source value)
 {
     using namespace kickcat::CoE;
 
@@ -17,28 +58,28 @@ static void WriteFmuToPdo(const EtherDOG::Mapping &m, Source value)
     case DataType::REAL64: // Also LREAL
     {
         // REAL64 type
-        WriteAs<double>(m.entry->data, value); // Convert Source to double and write
+        WriteAs<double>(m, value); // Convert Source to double and write
         break;
     }
 
     case DataType::REAL32: // Also REAL
     {
         // REAL32 type
-        WriteAs<float>(m.entry->data, value); // Convert double to float and write
+        WriteAs<float>(m, value); // Convert double to float and write
         break;
     }
 
     case DataType::BOOLEAN:
     {
         // BOOLEAN type
-        WriteAs<bool>(m.entry->data, value != 0); // Convert Source to bool (non-zero is true)
+        WriteAs<bool>(m, value != 0); // Convert Source to bool (non-zero is true)
         break;
     }
 
     case DataType::INTEGER8: // Also SINT
     {
         // INTEGER8 type
-        WriteAs<int8_t>(m.entry->data, value); // Convert Source to int8_t
+        WriteAs<int8_t>(m, value); // Convert Source to int8_t
         break;
     }
 
@@ -47,14 +88,14 @@ static void WriteFmuToPdo(const EtherDOG::Mapping &m, Source value)
     case DataType::BIT8:
     {
         // UNSIGNED8 type
-        WriteAs<uint8_t>(m.entry->data, value); // Convert Source to uint8_t
+        WriteAs<uint8_t>(m, value); // Convert Source to uint8_t
         break;
     }
 
     case DataType::INTEGER16: // Also INT
     {
         // INTEGER16 type
-        WriteAs<int16_t>(m.entry->data, value); // Convert Source to int16_t
+        WriteAs<int16_t>(m, value); // Convert Source to int16_t
         break;
     }
 
@@ -62,14 +103,14 @@ static void WriteFmuToPdo(const EtherDOG::Mapping &m, Source value)
     case DataType::WORD:
     {
         // UNSIGNED16 type
-        WriteAs<uint16_t>(m.entry->data, value); // Convert Source to uint16_t
+        WriteAs<uint16_t>(m, value); // Convert Source to uint16_t
         break;
     }
 
     case DataType::INTEGER32: // Also DINT
     {
         // INTEGER32 type
-        WriteAs<int32_t>(m.entry->data, value); // Convert Source to int32_t
+        WriteAs<int32_t>(m, value); // Convert Source to int32_t
         break;
     }
 
@@ -77,7 +118,7 @@ static void WriteFmuToPdo(const EtherDOG::Mapping &m, Source value)
     case DataType::DWORD:
     {
         // UNSIGNED32 type
-        WriteAs<uint32_t>(m.entry->data, value); // Convert Source to uint32_t
+        WriteAs<uint32_t>(m, value); // Convert Source to uint32_t
         break;
     }
 
@@ -89,16 +130,26 @@ static void WriteFmuToPdo(const EtherDOG::Mapping &m, Source value)
     }
 }
 
-template <typename Source, typename Target>
-static Target ReadAs(const void *source)
+template <typename Source, typename Target> static Target ReadAs(const EtherDOG::Mapping &m)
 {
+    assert(m.BitLen <= 64); // Ensure we don't read more than 64 bits
+
+    // Step 1: Read the raw bits from the process image into a buffer
+    uint8_t buffer[8];                 // temp buffer.
+    memset(buffer, 0, sizeof(buffer)); // Clear the buffer before reading
+    assert(m.output_process_image != nullptr);
+    readPiBits(m.output_process_image, m.PiBitOffset, m.BitLen, buffer);
+
+    // Step 2: Convert the buffer to the source type
     Source value;
-    std::memcpy(&value, source, sizeof(Source));
+    static_assert(sizeof(Source) <= 8, "Source type is too large for buffer");
+    std::memcpy(&value, buffer, sizeof(Source));
+
+    // step 3: Cast to the target type and return
     return static_cast<Target>(value);
 }
 
-template <typename Target>
-static Target ReadPdoAs(const EtherDOG::Mapping &m)
+template <typename Target> static Target ReadPdoAs(const EtherDOG::Mapping &m)
 {
     using namespace kickcat::CoE;
 
@@ -107,25 +158,25 @@ static Target ReadPdoAs(const EtherDOG::Mapping &m)
     case DataType::REAL64: // Also LREAL
     {
         // REAL64 type
-        return ReadAs<double, Target>(m.entry->data); // Read double value and convert to Target
+        return ReadAs<double, Target>(m); // Read double value and convert to Target
     }
 
     case DataType::REAL32: // Also REAL
     {
         // REAL32 type
-        return ReadAs<float, Target>(m.entry->data); // Read float value and convert to Target
+        return ReadAs<float, Target>(m); // Read float value and convert to Target
     }
 
     case DataType::BOOLEAN:
     {
         // BOOLEAN type
-        return ReadAs<bool, Target>(m.entry->data); // Read bool value and convert to Target (true=1, false=0)
+        return ReadAs<bool, Target>(m); // Read bool value and convert to Target (true=1, false=0)
     }
 
     case DataType::INTEGER8: // Also SINT
     {
         // INTEGER8 type
-        return ReadAs<int8_t, Target>(m.entry->data); // Read int8_t value and convert to Target
+        return ReadAs<int8_t, Target>(m); // Read int8_t value and convert to Target
     }
 
     case DataType::UNSIGNED8:
@@ -133,33 +184,33 @@ static Target ReadPdoAs(const EtherDOG::Mapping &m)
     case DataType::BIT8:
     {
         // UNSIGNED8 type
-        return ReadAs<uint8_t, Target>(m.entry->data); // Read uint8_t value and convert to Target
+        return ReadAs<uint8_t, Target>(m); // Read uint8_t value and convert to Target
     }
 
     case DataType::INTEGER16:
     {
         // INTEGER16 type
-        return ReadAs<int16_t, Target>(m.entry->data); // Read int16_t value and convert to Target
+        return ReadAs<int16_t, Target>(m); // Read int16_t value and convert to Target
     }
 
     case DataType::UNSIGNED16:
     case DataType::WORD:
     {
         // UNSIGNED16 type
-        return ReadAs<uint16_t, Target>(m.entry->data); // Read uint16_t value and convert to Target
+        return ReadAs<uint16_t, Target>(m); // Read uint16_t value and convert to Target
     }
 
     case DataType::INTEGER32: // Also DINT
     {
         // INTEGER32 type
-        return ReadAs<int32_t, Target>(m.entry->data); // Read int32_t value and convert to Target
+        return ReadAs<int32_t, Target>(m); // Read int32_t value and convert to Target
     }
 
     case DataType::UNSIGNED32:
     case DataType::DWORD:
     {
         // UNSIGNED32 type
-        return ReadAs<uint32_t, Target>(m.entry->data); // Read uint32_t value and convert to Target
+        return ReadAs<uint32_t, Target>(m); // Read uint32_t value and convert to Target
     }
 
     default:

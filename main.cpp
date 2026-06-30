@@ -36,9 +36,11 @@ int main(int argc, char *argv[])
     spdlog::info("EtherDOG FMU simulation starting...");
 
     std::string config_file;
+    bool verbose = false;
     argparse::ArgumentParser program("network_simulator");
 
     program.add_argument("-f", "--file").help("simple configuration file").required().store_into(config_file);
+    program.add_argument("-v", "--verbose").help("increase output verbosity").default_value(false).implicit_value(true).store_into(verbose);
 
     try
     {
@@ -71,7 +73,7 @@ int main(int argc, char *argv[])
     {
         etherdog.StartNetworks(config_dir, main_config);
         etherdog.loadFMU(fmu_path);
-        etherdog.SetupMappingFile(main_config);
+        etherdog.SetupMappingFile(main_config, verbose);
         spdlog::info("Load configuration successfully. Simulation has not started yet.");
     }
     catch (const std::exception &e)
