@@ -37,10 +37,12 @@ int EtherDOG::StartNetworks(const fs::path &config_dir, const nlohmann::json &ma
     pdos.reserve(slave_count);
     slaves.reserve(slave_count);
     mailboxes.reserve(slave_count);
+    dictionaries.reserve(slave_count);
+    slave_dictionaries.reserve(slave_count);
     input_pdo.reserve(slave_count);
     output_pdo.reserve(slave_count);
 
-    constexpr uint32_t PDO_MAX_SIZE = 32;
+    constexpr uint32_t PDO_MAX_SIZE = 4096;
     kickcat::ESI::Parser parser;
 
     for (const auto &config : slaves_config)
@@ -91,10 +93,20 @@ int EtherDOG::StartNetworks(const fs::path &config_dir, const nlohmann::json &ma
             }
 
             CoE::materializeStorage(device.dictionary);
+            dictionaries.push_back(std::make_unique<CoE::Dictionary>(std::move(device.dictionary)));
 
-            mbx->enableCoE(std::move(device.dictionary));
+            CoE::Dictionary *dictionary = dictionaries.back().get();
+
+            slave->setDictionary(dictionary);
+
+            mbx->enableCoE(*dictionary);
             slave->setMailbox(mbx.get());
             mailboxes.push_back(std::move(mbx));
+            slave_dictionaries.push_back(dictionary);
+        }
+        else
+        {
+            throw std::runtime_error("Slave configuration does not contain 'coe_xml' field");
         }
 
         input_pdo.emplace_back(PDO_MAX_SIZE);
@@ -109,23 +121,15 @@ int EtherDOG::StartNetworks(const fs::path &config_dir, const nlohmann::json &ma
         slaves.push_back(std::move(slave));
     }
 
-    // Configure DL status for each ESC based on its position in the chain.
-    // Port 0 is always connected (upstream to master or previous slave).
-    // Port 1 is connected if there is a downstream slave.
-    for (size_t i = 0; i < escs.size(); ++i)
+    std::vector<EmulatedESC *> esc_ptrs;
+    esc_ptrs.reserve(escs.size());
+
+    for (auto &esc : escs)
     {
-        uint16_t dl_status = 0;
-        dl_status |= (1 << 4); // PL_port0
-        dl_status |= (1 << 9); // COM_port0
-
-        if (i + 1 < escs.size())
-        {
-            dl_status |= (1 << 5);  // PL_port1
-            dl_status |= (1 << 11); // COM_port1
-        }
-
-        escs[i]->write(reg::ESC_DL_STATUS, &dl_status, sizeof(dl_status));
+        esc_ptrs.push_back(esc.get());
     }
+
+    network = std::make_unique<EmulatedNetwork>(std::move(esc_ptrs));
 
     auto [socket2, _] = createSockets(interface, "");
     socket = std::move(socket2);
@@ -147,22 +151,18 @@ void EtherDOG::FrameHandler()
 
     Frame frame;
     int32_t received = socket->read(frame.data(), ETH_MAX_SIZE);
-
-    fmu_mutex.lock(); // Lock MUTEX here if needed to safely read fmu_output while it's being updated by FmuThread
-    while (true)
+    if (received <= 0)
     {
-        auto [header, data, wkc] = frame.peekDatagram();
-        if (header == nullptr)
-        {
-            break;
-        }
-
-        for (auto &esc : escs)
-        {
-            esc->processDatagram(header, data, wkc);
-        }
+        spdlog::warn("No data received or error occurred while reading from socket. Received: {}", received);
+        return;
     }
 
+    if (!network->route(frame, false))
+    {
+        return;
+    }
+
+    fmu_mutex.lock(); // Lock MUTEX here if needed to safely read fmu_output while it's being updated by FmuThread
     for (size_t i = 0; i < slaves.size(); ++i)
     {
         slaves[i]->routine();
@@ -290,13 +290,13 @@ void EtherDOG::SetupMappingFile(const nlohmann::json &main_config)
     {
         const auto &slave_config = slaves_config[i];
 
-        if (i >= mailboxes.size())
+        if (i >= slave_dictionaries.size())
         {
-            std::cerr << "No mailbox found for slave " << i << std::endl;
+            std::cerr << "No dictionary found for slave " << i << std::endl;
             continue;
         }
 
-        auto &dict = mailboxes[i]->getDictionary();
+        auto &dict = *slave_dictionaries[i];
 
         if (slave_config.contains("input-mappings"))
         {

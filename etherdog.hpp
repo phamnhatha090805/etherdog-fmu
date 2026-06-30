@@ -17,6 +17,7 @@
 #include "kickcat/CoE/OD.h"
 #include "kickcat/CoE/mailbox/response.h"
 #include "kickcat/ESC/EmulatedESC.h"
+#include "kickcat/EmulatedNetwork.h"
 #include "kickcat/Frame.h"
 #include "kickcat/OS/Time.h"
 #include "kickcat/PDO.h"
@@ -90,6 +91,9 @@ class EtherDOG
     std::vector<std::unique_ptr<mailbox::response::Mailbox>> mailboxes;
     std::vector<std::vector<uint8_t>> input_pdo;
     std::vector<std::vector<uint8_t>> output_pdo;
+    std::vector<std::unique_ptr<kickcat::CoE::Dictionary>> dictionaries;
+    std::vector<kickcat::CoE::Dictionary *> slave_dictionaries;
+    std::unique_ptr<kickcat::EmulatedNetwork> network;
 
     std::vector<nanoseconds> stats;
 
