@@ -1,8 +1,157 @@
 
 #include "etherdog.hpp"
 #include "PdoFmuConverter.hpp"
-#include <thread>
 #include <spdlog/spdlog.h>
+#include <thread>
+
+enum class PdoDirection
+{
+    Input,  // TxPDO: slave -> master, assigned PDOs 0x1A00-0x1BFF, lives in the input PI
+    Output, // RxPDO: master -> slave, assigned PDOs 0x1600-0x17FF, lives in the output PI
+};
+
+// One resolved process-data field. data_entry is the object the slave actually maps
+// (its is_mapped flips true at SAFE_OP); pi_bit_offset/bit_len locate the field in
+// the SM image (the buffer passed to PDO::setInput / PDO::setOutput).
+struct PdoBinding
+{
+    kickcat::CoE::Entry *data_entry = nullptr;
+    std::string channel_name; // mapping object name, e.g. "Channel 1"
+    std::string entry_name;   // mapping entry description, e.g. "Input"
+    uint16_t data_index = 0;  // e.g. 0x3101
+    uint8_t data_sub = 0;     // e.g. 1
+    uint32_t pi_bit_offset = 0;
+    uint16_t bit_len = 0;
+    PdoDirection direction = PdoDirection::Input;
+};
+
+bool isTxPdoIndex(uint16_t pdo_index)
+{
+    return (pdo_index >= 0x1A00 and pdo_index <= 0x1BFF);
+}
+
+// Replays PDO::configureMapping / parsePdoMap over the dictionary: walk every SM
+// assignment object (0x1C10 + SM index), then each assigned PDO map, accumulating
+// the bit offset exactly like the slave does (it restarts at 0 per direction). For
+// every mapped field, follow the mapping word to its data object and record the
+// binding. Call AFTER the dictionary is attached to the slave; the data_entry
+// pointers stay valid as long as the dictionary is not reallocated.
+std::vector<PdoBinding> enumeratePdoBindings(kickcat::CoE::Dictionary &dict)
+{
+    using namespace kickcat;
+    std::vector<PdoBinding> bindings;
+
+    uint32_t input_bit_offset = 0;
+    uint32_t output_bit_offset = 0;
+
+    for (uint16_t assign = 0x1C10; assign <= 0x1C1F; ++assign)
+    {
+        auto [assign_obj, assign_count] = CoE::findObject(dict, assign, 0);
+        if (assign_count == nullptr or assign_count->data == nullptr)
+        {
+            continue;
+        }
+        uint8_t pdo_count = *static_cast<uint8_t *>(assign_count->data);
+
+        for (uint8_t i = 1; i <= pdo_count; ++i)
+        {
+            auto [assign_entry_obj, assign_entry] = CoE::findObject(dict, assign, i);
+            if (assign_entry == nullptr or assign_entry->data == nullptr)
+            {
+                continue;
+            }
+            uint16_t pdo_index = *static_cast<uint16_t *>(assign_entry->data);
+
+            PdoDirection dir = PdoDirection::Output;
+            if (isTxPdoIndex(pdo_index))
+            {
+                dir = PdoDirection::Input;
+            }
+
+            uint32_t *bit_offset = &output_bit_offset;
+            if (dir == PdoDirection::Input)
+            {
+                bit_offset = &input_bit_offset;
+            }
+
+            auto [pdo_obj, pdo_count_entry] = CoE::findObject(dict, pdo_index, 0);
+            if (pdo_count_entry == nullptr or pdo_count_entry->data == nullptr)
+            {
+                continue;
+            }
+            uint8_t entry_count = *static_cast<uint8_t *>(pdo_count_entry->data);
+
+            for (uint8_t s = 1; s <= entry_count; ++s)
+            {
+                auto [map_obj, map_entry] = CoE::findObject(dict, pdo_index, s);
+                if (map_entry == nullptr or map_entry->data == nullptr)
+                {
+                    continue;
+                }
+                uint32_t word = *static_cast<uint32_t *>(map_entry->data);
+                uint16_t tgt_index = static_cast<uint16_t>((word & CoE::PDO::MAPPING_INDEX_MASK) >> CoE::PDO::MAPPING_INDEX_SHIFT);
+                uint8_t tgt_sub = static_cast<uint8_t>((word & CoE::PDO::MAPPING_SUB_MASK) >> CoE::PDO::MAPPING_SUB_SHIFT);
+                uint16_t bits = static_cast<uint16_t>(word & CoE::PDO::MAPPING_LENGTH_MASK);
+
+                // ETG.1000.6 Tables 74/75: index 0 is a padding gap, no data object.
+                if (tgt_index == 0)
+                {
+                    *bit_offset += bits;
+                    continue;
+                }
+
+                auto [tgt_obj, tgt_entry] = CoE::findObject(dict, tgt_index, tgt_sub);
+
+                PdoBinding b;
+                b.data_entry = tgt_entry;
+                b.data_index = tgt_index;
+                b.data_sub = tgt_sub;
+                b.pi_bit_offset = *bit_offset;
+                b.bit_len = bits;
+                b.direction = dir;
+                if (pdo_obj != nullptr)
+                {
+                    b.channel_name = pdo_obj->name;
+                }
+                b.entry_name = tgt_entry->description;
+                bindings.push_back(std::move(b));
+
+                *bit_offset += bits;
+            }
+        }
+    }
+
+    return bindings;
+}
+
+// Resolve a JSON PDO name ("Channel 1/Input" or just "Input") against the bindings.
+// Matching uses the human-readable mapping-object metadata, but the returned binding
+// points at the DATA object -- this is the is_mapped fix.
+PdoBinding const &resolvePdoBinding(std::vector<PdoBinding> const &bindings, std::string const &pdo_name)
+{
+    std::string channel;
+    std::string entry = pdo_name;
+    auto slash = pdo_name.find('/');
+    if (slash != std::string::npos)
+    {
+        channel = pdo_name.substr(0, slash);
+        entry = pdo_name.substr(slash + 1);
+    }
+
+    for (auto const &b : bindings)
+    {
+        if (not channel.empty() and b.channel_name != channel)
+        {
+            continue;
+        }
+        if (b.entry_name == entry)
+        {
+            return b;
+        }
+    }
+
+    throw std::runtime_error("PDO entry not found: " + pdo_name);
+}
 
 static kickcat::eeprom::SII ReadEepromSII(std::filesystem::path const &eeprom_path)
 {
@@ -24,60 +173,25 @@ static kickcat::eeprom::SII ReadEepromSII(std::filesystem::path const &eeprom_pa
     return sii;
 }
 
-int EtherDOG::StartNetworks(int argc, char *argv[])
+int EtherDOG::StartNetworks(const fs::path &config_dir, const nlohmann::json &main_config)
 {
     // This function can be used to set up the EtherCAT network simulation, including parsing command-line arguments, initializing the slaves and PDOs, and starting the network communication.
 
-    argparse::ArgumentParser program("network_simulator");
-
-    program.add_argument("-f", "--file")
-        .help("simple configuration file")
-        .required()
-        .store_into(config_file);
-
-    program.add_argument("--load-config-only")
-        .help("load the selected configuration and print device/mapping information without starting the simulation")
-        .default_value(false)
-        .implicit_value(true)
-        .store_into(load_config_only);
-
-    try
-    {
-        program.parse_args(argc, argv);
-    }
-    catch (const std::runtime_error &err)
-    {
-        std::cerr << err.what() << std::endl;
-        std::cerr << program;
-        return 1;
-    }
-
-    std::ifstream file(config_file);
-    if (!file.is_open())
-    {
-        std::cerr << "Failed to open configuration file: " << config_file << std::endl;
-        return 1;
-    }
-
-    file >> main_config;
-
-    interface = main_config["interface"];
-    fmu_path = main_config["fmuPath"];
+    std::string interface = main_config["interface"];
 
     auto &slaves_config = main_config["slaves"];
     size_t slave_count = slaves_config.size();
-
-    fs::path main_config_path = fs::path(config_file);
-    fs::path config_dir = main_config_path.parent_path();
 
     escs.reserve(slave_count);
     pdos.reserve(slave_count);
     slaves.reserve(slave_count);
     mailboxes.reserve(slave_count);
+    dictionaries.reserve(slave_count);
+    slave_dictionaries.reserve(slave_count);
     input_pdo.reserve(slave_count);
     output_pdo.reserve(slave_count);
 
-    constexpr uint32_t PDO_MAX_SIZE = 32;
+    constexpr uint32_t PDO_MAX_SIZE = 4096;
     kickcat::ESI::Parser parser;
 
     for (const auto &config : slaves_config)
@@ -92,8 +206,6 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
         if (config.contains("coe_xml"))
         {
             fs::path coe_xml_full_path = config_dir / config["coe_xml"].get<std::string>();
-
-            auto mbx = std::make_unique<mailbox::response::Mailbox>(esc.get(), 1024);
 
             auto sii = ReadEepromSII(eeprom_full_path);
 
@@ -128,10 +240,30 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
             }
 
             CoE::materializeStorage(device.dictionary);
+            dictionaries.push_back(std::make_unique<CoE::Dictionary>(std::move(device.dictionary)));
 
-            mbx->enableCoE(std::move(device.dictionary));
-            slave->setMailbox(mbx.get());
-            mailboxes.push_back(std::move(mbx));
+            CoE::Dictionary *dictionary = dictionaries.back().get();
+
+            bool esi_coe_advertised = false; // true => device declares a CoE mailbox (SDO on the wire)
+            if (not device.dictionary.empty())
+            {
+                esi_coe_advertised = (device.mailbox and device.mailbox->coe);
+            }
+
+            slave->setDictionary(dictionary);
+
+            if (esi_coe_advertised)
+            {
+                auto mbx = std::make_unique<mailbox::response::Mailbox>(esc.get(), 1024);
+                mbx->enableCoE(*dictionary);
+                slave->setMailbox(mbx.get());
+                mailboxes.push_back(std::move(mbx));
+            }
+            slave_dictionaries.push_back(dictionary);
+        }
+        else
+        {
+            throw std::runtime_error("Slave configuration does not contain 'coe_xml' field");
         }
 
         input_pdo.emplace_back(PDO_MAX_SIZE);
@@ -146,23 +278,15 @@ int EtherDOG::StartNetworks(int argc, char *argv[])
         slaves.push_back(std::move(slave));
     }
 
-    // Configure DL status for each ESC based on its position in the chain.
-    // Port 0 is always connected (upstream to master or previous slave).
-    // Port 1 is connected if there is a downstream slave.
-    for (size_t i = 0; i < escs.size(); ++i)
+    std::vector<EmulatedESC *> esc_ptrs;
+    esc_ptrs.reserve(escs.size());
+
+    for (auto &esc : escs)
     {
-        uint16_t dl_status = 0;
-        dl_status |= (1 << 4); // PL_port0
-        dl_status |= (1 << 9); // COM_port0
-
-        if (i + 1 < escs.size())
-        {
-            dl_status |= (1 << 5);  // PL_port1
-            dl_status |= (1 << 11); // COM_port1
-        }
-
-        escs[i]->write(reg::ESC_DL_STATUS, &dl_status, sizeof(dl_status));
+        esc_ptrs.push_back(esc.get());
     }
+
+    network = std::make_unique<EmulatedNetwork>(std::move(esc_ptrs));
 
     auto [socket2, _] = createSockets(interface, "");
     socket = std::move(socket2);
@@ -184,22 +308,18 @@ void EtherDOG::FrameHandler()
 
     Frame frame;
     int32_t received = socket->read(frame.data(), ETH_MAX_SIZE);
-
-    fmu_mutex.lock(); // Lock MUTEX here if needed to safely read fmu_output while it's being updated by FmuThread
-    while (true)
+    if (received <= 0)
     {
-        auto [header, data, wkc] = frame.peekDatagram();
-        if (header == nullptr)
-        {
-            break;
-        }
-
-        for (auto &esc : escs)
-        {
-            esc->processDatagram(header, data, wkc);
-        }
+        // spdlog::warn("No data received or error occurred while reading from socket. Received: {}", received);
+        return;
     }
 
+    if (!network->route(frame, false))
+    {
+        return;
+    }
+
+    fmu_mutex.lock(); // Lock MUTEX here if needed to safely read fmu_output while it's being updated by FmuThread
     for (size_t i = 0; i < slaves.size(); ++i)
     {
         slaves[i]->routine();
@@ -216,33 +336,45 @@ void EtherDOG::FrameHandler()
     int32_t written = socket->write(frame.data(), received);
 }
 
-void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_md, size_t slave_index, kickcat::CoE::Dictionary &dict, json &out_map, std::vector<EtherDOG::Mapping> &mappings)
+void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_md, size_t slave_index, kickcat::CoE::Dictionary &dict, json &out_map, std::vector<EtherDOG::Mapping> &mappings,
+                 const bool verbose)
 {
     // This function loads the mapping between FMU variables and EtherCAT PDOs from the provided JSON configuration and the CoE dictionary, and stores it in the provided mappings vector.
 
-    for (auto &object : dict)
+    // is_mapped fix: resolve every PDO name to the DATA object (whose is_mapped flips
+    // true at SAFE_OP), not the PDO mapping object. One walk replays the slave-side
+    // mapping so we also learn each field's absolute bit offset in the SM image.
+    auto bindings = enumeratePdoBindings(dict);
+
+    if (verbose)
     {
         std::cerr << "\n===== DICTIONARY DUMP slave " << slave_index << " =====\n";
         std::cerr << "dict size = " << dict.size() << "\n";
-        std::cout << "Object 0x" << std::hex << object.index
-                  << std::dec << " name='" << object.name << "'\n";
-
-        for (auto &entry : object.entries)
+        for (auto &object : dict)
         {
-            std::cout << "  sub=" << (int)entry.subindex
-                      << " desc='" << entry.description << "'"
-                      << " bitlen=" << entry.bitlen
-                      << " bitoff=" << entry.bitoff
-                      << "\n";
+            std::cout << "Object 0x" << std::hex << object.index << std::dec << " name='" << object.name << "'\n";
+
+            for (auto &entry : object.entries)
+            {
+                std::cout << "  sub=" << (int)entry.subindex << " desc='" << entry.description << "'"
+                          << " bitlen=" << entry.bitlen << " bitoff=" << entry.bitoff << "\n";
+            }
+        }
+
+        // Print bindings for debugging
+        std::cerr << "\n===== BINDINGS DUMP slave " << slave_index << " =====\n";
+        for (const auto &b : bindings)
+        {
+            std::cout << "Binding: channel='" << b.channel_name << "' entry='" << b.entry_name << "' index=0x" << std::hex << b.data_index << std::dec << " sub=" << (int)b.data_sub
+                      << " pi_bit_offset=" << b.pi_bit_offset << " bit_len=" << b.bit_len << " is_mapped=" << (b.data_entry ? b.data_entry->is_mapped : false) << "\n";
         }
     }
 
     for (auto i = out_map.begin(); i != out_map.end(); ++i)
     {
-        std::cout << "Key: " << i.key() << ", Value: " << i.value() << std::endl;
-
         std::string fmu_var = i.key();
         std::string pdo_name = i.value().get<std::string>();
+        spdlog::info("Key: {}, Value: {}", fmu_var, pdo_name);
 
         auto variable = cs_md->get_variable_by_name(fmu_var);
         fmi2ValueReference vr;
@@ -272,71 +404,28 @@ void LoadMapping(std::shared_ptr<const fmi4cpp::fmi2::cs_model_description> cs_m
             continue; // Skip unsupported variable types
         }
 
-        bool mapping_found = false;
+        // Bind to the DATA object (is_mapped lives here) with the real PI bit offset.
+        // resolvePdoBinding throws if the name is unknown, matching the old behaviour.
+        PdoBinding const &b = resolvePdoBinding(bindings, pdo_name);
 
-        std::string ChannelName;
-        std::string EntryName = pdo_name;
+        std::cout << "[DEBUG] JSON PDO name '" << pdo_name << "' resolved to DATA object 0x" << std::hex << b.data_index << ":" << std::dec << int(b.data_sub) << " channel='" << b.channel_name << "'"
+                  << " entry='" << b.entry_name << "'"
+                  << " pi_bit_offset=" << b.pi_bit_offset << " bitlen=" << b.bit_len << " is_mapped=" << (b.data_entry ? b.data_entry->is_mapped : false) << std::endl;
 
-        auto slash = pdo_name.find('/');
-        if (slash != std::string::npos)
+        if (b.bit_len % 8 != 0)
         {
-            ChannelName = pdo_name.substr(0, slash);
-            EntryName = pdo_name.substr(slash + 1);
+            throw std::runtime_error("PDO entry bit length is not a multiple of 8 for entry '" + b.entry_name + "'.");
         }
 
-        for (auto &object : dict)
-        {
-            if (!ChannelName.empty() && object.name != ChannelName)
-            {
-                continue;
-            }
+        EtherDOG::Mapping m{vr, (size_t)((b.bit_len + 7) / 8), pdo_name, slave_index, fmu_var, fmuVarType, b.data_entry, false};
 
-            for (auto &entry : object.entries)
-            {
-                if (entry.description == EntryName)
-                {
-                    std::cout
-                        << "[DEBUG] JSON PDO name '" << pdo_name
-                        << "' resolved to object 0x"
-                        << std::hex << object.index
-                        << ":" << std::dec << int(entry.subindex)
-                        << " object_name='" << object.name << "'"
-                        << " entry_desc='" << entry.description << "'"
-                        << " bitlen=" << entry.bitlen
-                        << " is_mapped=" << entry.is_mapped
-                        << std::endl;
-
-                    EtherDOG::Mapping m{
-                        vr,
-                        (size_t)((entry.bitlen + 7) / 8),
-                        pdo_name,
-                        slave_index,
-                        fmu_var,
-                        fmuVarType,
-                        &entry,
-                        false};
-
-                    mappings.push_back(m);
-                    mapping_found = true;
-                    break;
-                }
-            }
-
-            if (mapping_found)
-            {
-                break;
-            }
-        }
-
-        if (!mapping_found)
-        {
-            std::cerr << "PDO entry not found: " << pdo_name << std::endl;
-            throw std::runtime_error("PDO entry not found: " + pdo_name);
-        }
+        m.PiBitOffset = b.pi_bit_offset;
+        m.BitLen = b.bit_len;
+        mappings.push_back(m);
     }
 }
 
-void EtherDOG::SetupMappingFile()
+void EtherDOG::SetupMappingFile(const nlohmann::json &main_config, const bool verbose)
 {
     auto &slaves_config = main_config["slaves"];
 
@@ -344,26 +433,37 @@ void EtherDOG::SetupMappingFile()
     {
         const auto &slave_config = slaves_config[i];
 
-        if (i >= mailboxes.size())
+        if (i >= slave_dictionaries.size())
         {
-            std::cerr << "No mailbox found for slave " << i << std::endl;
+            std::cerr << "No dictionary found for slave " << i << std::endl;
             continue;
         }
 
-        auto &dict = mailboxes[i]->getDictionary();
-        printf("EtherDOG dict address = %p\n", (void *)&dict);
+        auto &dict = *slave_dictionaries[i];
 
         if (slave_config.contains("input-mappings"))
         {
             auto input_map = slave_config["input-mappings"];
-            LoadMapping(cs_md, i, dict, input_map, input_mappings);
+            LoadMapping(cs_md, i, dict, input_map, input_mappings, verbose);
         }
 
         if (slave_config.contains("output-mappings"))
         {
             auto output_map = slave_config["output-mappings"];
-            LoadMapping(cs_md, i, dict, output_map, output_mappings);
+            LoadMapping(cs_md, i, dict, output_map, output_mappings, verbose);
         }
+    }
+
+    // set process image for each mapping:
+    for (auto &m : input_mappings)
+    {
+        m.input_process_image = input_pdo[m.SlaveIndex].data();
+    }
+
+    // set process image for each mapping:
+    for (auto &m : output_mappings)
+    {
+        m.output_process_image = output_pdo[m.SlaveIndex].data();
     }
 }
 
@@ -438,7 +538,8 @@ void EtherDOG::ExecutePdoInputMappings()
 
 void EtherDOG::ExecutePdoOutputMappings()
 {
-    // This function can be called in Step() before stepping the FMU to read the latest values from the PDO memory based on the mappings set up in SetupMapping and write them to the corresponding FMU variables.
+    // This function can be called in Step() before stepping the FMU to read the latest values from the PDO memory based on the mappings set up in SetupMapping and write them to the corresponding FMU
+    // variables.
 
     fmu_mutex.lock(); // Lock MUTEX here if needed to safely read FMU variable while it's being updated by FmuThread
     for (auto &m : output_mappings)
@@ -501,15 +602,15 @@ void EtherDOG::ExecutePdoOutputMappings()
     fmu_mutex.unlock(); // Unlock MUTEX here if it was locked before to allow FmuThread to update FMU variable again
 }
 
-void EtherDOG::loadFMU(const std::string &path)
+void EtherDOG::loadFMU(const fs::path &path)
 {
     // This function loads the FMU from the specified path and initializes the cs_fmu, cs_md, and fmu_slave members.
 
-    std::cout << "Loading FMU from path: " << path << std::endl;
+    spdlog::info("Loading FMU from path: {}", path.string());
     fmi2::fmu fmu(path);
     cs_fmu = fmu.as_cs_fmu();
     cs_md = cs_fmu->get_model_description(); // smart pointer to a cs_model_description instance
-    std::cout << "model_identifier=" << cs_md->model_identifier << std::endl;
+    spdlog::info("model_identifier={}", cs_md->model_identifier);
     fmu_slave = cs_fmu->new_instance();
 }
 
@@ -517,7 +618,7 @@ void EtherDOG::start()
 {
     // This function can be used to perform any necessary initialization before starting the simulation, such as setting up the FMU experiment and entering initialization mode.
 
-    std::cout << "Starting simulation..." << std::endl;
+    spdlog::info("Starting simulation...");
     fmu_slave->setup_experiment();
     fmu_slave->enter_initialization_mode();
     fmu_slave->exit_initialization_mode();
@@ -545,7 +646,8 @@ void EtherDOG::step()
     // This function performs a single simulation step, including executing the PDO output mappings to update the FMU variables with the latest values from the PDO memory,
     // stepping the FMU, and then executing the PDO input mappings to update the PDO memory with the latest values from the FMU variables.
 
-    ExecutePdoOutputMappings(); // Call ExecutePdoOutputMappings to read the latest values from the PDO memory based on the mappings set up in SetupMapping and write them to the corresponding FMU variables.
+    ExecutePdoOutputMappings(); // Call ExecutePdoOutputMappings to read the latest values from the PDO memory based on the mappings set up in SetupMapping and write them to the corresponding FMU
+                                // variables.
 
     if (!fmu_slave->step(stepSize))
     {

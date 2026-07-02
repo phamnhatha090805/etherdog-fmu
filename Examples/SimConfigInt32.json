@@ -1,10 +1,10 @@
 {
     "interface": "eth0",
-    "fmuPath": "../Examples/FmuModel/SimConfigInt32-1.fmu",
+    "fmuPath": "FmuModel/SimConfigInt32-1.fmu",
     "slaves": [
         {
-            "eeprom": "../Examples/EsiFiles/BIN/Box 1 (EtherDOG).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/EtherDOG.xml",
+            "eeprom": "EsiFiles/BIN/Box 1 (EtherDOG).bin",
+            "coe_xml": "EsiFiles/XML/EtherDOG.xml",
             "input-mappings": {
                 "Out1": "AnalogIN2",
                 "Out2": "AnalogIN4"

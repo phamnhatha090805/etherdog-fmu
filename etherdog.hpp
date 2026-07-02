@@ -1,22 +1,23 @@
 #pragma once
 
 #include <algorithm>
-#include <argparse/argparse.hpp>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <sstream>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <numeric>
-#include <mutex>
-#include <atomic>
+#include <sstream>
 
 #include <fmi4cpp/fmi4cpp.hpp>
 #include <kickcat/KickCAT.h>
 
 #include "kickcat/CoE/EsiParser.h"
+#include "kickcat/CoE/OD.h"
 #include "kickcat/CoE/mailbox/response.h"
 #include "kickcat/ESC/EmulatedESC.h"
+#include "kickcat/EmulatedNetwork.h"
 #include "kickcat/Frame.h"
 #include "kickcat/OS/Time.h"
 #include "kickcat/PDO.h"
@@ -25,9 +26,8 @@
 #include <kickcat/AbstractSocket.h>
 #include <kickcat/ESI/Device.h>
 #include <kickcat/ESI/Parser.h>
-#include <kickcat/SIIParser.h>
 #include <kickcat/ESI/SIIBuilder.h>
-#include "kickcat/CoE/OD.h"
+#include <kickcat/SIIParser.h>
 
 using namespace fmi4cpp;
 using namespace kickcat;
@@ -38,10 +38,8 @@ namespace fs = std::filesystem;
 
 class EtherDOG
 {
-public:
-    std::string fmu_path;
-    bool load_config_only = false;
-    void loadFMU(const std::string &path);
+  public:
+    void loadFMU(const fs::path &path);
     void start();
     void run();
     void step();
@@ -50,10 +48,10 @@ public:
 
     void FmuThread();
 
-    int StartNetworks(int argc, char *argv[]);
+    int StartNetworks(const fs::path &config_dir, const nlohmann::json &main_config);
     void FrameHandler();
 
-    void SetupMappingFile();
+    void SetupMappingFile(const nlohmann::json &main_config, const bool verbose);
 
     const double stopTime = 10.0;
     const double stepSize = 0.1; // this is in seconds
@@ -75,9 +73,14 @@ public:
         FmuVariableType fmuVarType;
         CoE::Entry *entry; // the CoE entry corresponding to this mapping
         bool MessagePrinted;
+
+        uint32_t PiBitOffset = 0; // absolute bit offset of the field in the SM image
+        uint16_t BitLen = 0;      // field width in bits
+        uint8_t *input_process_image = nullptr;
+        uint8_t const *output_process_image = nullptr;
     };
 
-private:
+  private:
     void ExecutePdoInputMappings();
     void ExecutePdoOutputMappings();
 
@@ -93,10 +96,10 @@ private:
     std::vector<std::unique_ptr<mailbox::response::Mailbox>> mailboxes;
     std::vector<std::vector<uint8_t>> input_pdo;
     std::vector<std::vector<uint8_t>> output_pdo;
+    std::vector<std::unique_ptr<kickcat::CoE::Dictionary>> dictionaries;
+    std::vector<kickcat::CoE::Dictionary *> slave_dictionaries;
+    std::unique_ptr<kickcat::EmulatedNetwork> network;
 
-    std::string config_file;
-    std::string interface;
-    json main_config;
     std::vector<nanoseconds> stats;
 
     std::vector<Mapping> input_mappings;
@@ -104,5 +107,6 @@ private:
 
     std::mutex fmu_mutex; // Mutex to protect access to FMU output variable
 
-    std::atomic<bool> running{true}; // Atomic flag to control the running state of the simulation, can be set to false to request stopping the simulation
+    std::atomic<bool> running{true}; // Atomic flag to control the running state of the simulation, can
+                                     // be set to false to request stopping the simulation
 };

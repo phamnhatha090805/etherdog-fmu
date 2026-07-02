@@ -1,0 +1,6 @@
+
+IndentWidth: 4
+UseTab: Never
+ColumnLimit: 200
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: None

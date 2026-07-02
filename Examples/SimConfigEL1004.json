@@ -1,14 +1,14 @@
 {
     "interface": "eth0",
-    "fmuPath": "../Examples/FmuModel/SimConfigBool-1.fmu",
+    "fmuPath": "FmuModel/SimConfigBool-1.fmu",
     "slaves": [
         {
-            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 1 (EK1100).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
+            "eeprom": "EsiFiles/BIN/Official Beckhoff/Term 1 (EK1100).bin",
+            "coe_xml": "EsiFiles/XML/Official Beckhoff/Beckhoff EK11xx.xml"
         },
         {
-            "eeprom": "../Examples/EsiFiles/BIN/Official Beckhoff/Term 2 (EL1004).bin",
-            "coe_xml": "../Examples/EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml",
+            "eeprom": "EsiFiles/BIN/Official Beckhoff/Term 2 (EL1004).bin",
+            "coe_xml": "EsiFiles/XML/Official Beckhoff/Beckhoff EL1xxx.xml",
             "input-mappings": {
                 "Out1": "Channel 1/Input"
             }
