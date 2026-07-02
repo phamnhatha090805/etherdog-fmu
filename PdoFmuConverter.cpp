@@ -7,8 +7,8 @@ void readPiBits(uint8_t const *pi, uint32_t bit_offset, uint16_t bit_len, uint8_
 {
     for (uint16_t i = 0; i < bit_len; ++i)
     {
-        uint32_t bit = bit_offset + i;
-        uint64_t b = (pi[bit / 8] >> (bit % 8)) & 0x1u;
+        uint32_t pi_bit = bit_offset + i;
+        uint64_t b = (pi[pi_bit / 8] >> (pi_bit % 8)) & 0x1u;
         buffer[i / 8] |= (b << (i % 8));
     }
 }
@@ -17,17 +17,17 @@ void writePiBits(uint8_t *pi, uint32_t bit_offset, uint16_t bit_len, const uint8
 {
     for (uint16_t i = 0; i < bit_len; ++i)
     {
-        uint32_t bit = bit_offset + i;
-        uint8_t mask = static_cast<uint8_t>(1u << (bit % 8));
+        uint32_t pi_bit = bit_offset + i;
+        uint8_t mask = static_cast<uint8_t>(1u << (pi_bit % 8));
         // TODO: check endianness and bit ordering
-        uint64_t b = (buffer[bit / 8] >> (bit % 8)) & 0x1u;
+        uint64_t b = (buffer[i / 8] >> (i % 8)) & 0x1u;
         if (b == 0)
         {
-            pi[bit / 8] &= static_cast<uint8_t>(~mask);
+            pi[pi_bit / 8] &= static_cast<uint8_t>(~mask);
         }
         else
         {
-            pi[bit / 8] |= mask;
+            pi[pi_bit / 8] |= mask;
         }
     }
 }

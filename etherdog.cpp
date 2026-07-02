@@ -207,8 +207,6 @@ int EtherDOG::StartNetworks(const fs::path &config_dir, const nlohmann::json &ma
         {
             fs::path coe_xml_full_path = config_dir / config["coe_xml"].get<std::string>();
 
-            auto mbx = std::make_unique<mailbox::response::Mailbox>(esc.get(), 1024);
-
             auto sii = ReadEepromSII(eeprom_full_path);
 
             uint32_t vendor_id = sii.info.vendor_id;
@@ -246,11 +244,21 @@ int EtherDOG::StartNetworks(const fs::path &config_dir, const nlohmann::json &ma
 
             CoE::Dictionary *dictionary = dictionaries.back().get();
 
+            bool esi_coe_advertised = false; // true => device declares a CoE mailbox (SDO on the wire)
+            if (not device.dictionary.empty())
+            {
+                esi_coe_advertised = (device.mailbox and device.mailbox->coe);
+            }
+
             slave->setDictionary(dictionary);
 
-            mbx->enableCoE(*dictionary);
-            slave->setMailbox(mbx.get());
-            mailboxes.push_back(std::move(mbx));
+            if (esi_coe_advertised)
+            {
+                auto mbx = std::make_unique<mailbox::response::Mailbox>(esc.get(), 1024);
+                mbx->enableCoE(*dictionary);
+                slave->setMailbox(mbx.get());
+                mailboxes.push_back(std::move(mbx));
+            }
             slave_dictionaries.push_back(dictionary);
         }
         else
@@ -437,23 +445,25 @@ void EtherDOG::SetupMappingFile(const nlohmann::json &main_config, const bool ve
         {
             auto input_map = slave_config["input-mappings"];
             LoadMapping(cs_md, i, dict, input_map, input_mappings, verbose);
-            // set process image for each mapping:
-            for (auto &m : input_mappings)
-            {
-                m.input_process_image = input_pdo[i].data();
-            }
         }
 
         if (slave_config.contains("output-mappings"))
         {
             auto output_map = slave_config["output-mappings"];
             LoadMapping(cs_md, i, dict, output_map, output_mappings, verbose);
-            // set process image for each mapping:
-            for (auto &m : output_mappings)
-            {
-                m.output_process_image = output_pdo[i].data();
-            }
         }
+    }
+
+    // set process image for each mapping:
+    for (auto &m : input_mappings)
+    {
+        m.input_process_image = input_pdo[m.SlaveIndex].data();
+    }
+
+    // set process image for each mapping:
+    for (auto &m : output_mappings)
+    {
+        m.output_process_image = output_pdo[m.SlaveIndex].data();
     }
 }
 
